@@ -2,7 +2,7 @@ Math-Geometry-Delaunay
 
 This is a Perl interface to Jonathan Shewchuk's Triangle library.
 
-version 0.01_ALPHA_PRE_RELEASE - not thoroughly tested
+version 0.01  - alpha release - not thoroughly tested
 
 "Triangle generates exact Delaunay triangulations, constrained Delaunay 
 triangulations, conforming Delaunay triangulations, Voronoi diagrams, and 
