@@ -1,7 +1,6 @@
 #!perl -T
 
 use Test::More tests => 10;
-use Test::Output;
 
 use Math::Geometry::Delaunay qw(TRI_CONSTRAINED TRI_CCDT TRI_CONFORMING TRI_VORONOI);
 
