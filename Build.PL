@@ -47,11 +47,21 @@ my $builder = Module::Build->new(
 # The HAVE__CONTROLFP (Microsoft) and HAVE__FPU_SETCW (Linux) flags will give us
 # the right macros for the platform.
 
+# For Cygwin, we try to compile so we're always in normal precision mode.
+# There is no runtime attempt to set or restore precision of doubles under
+# Cygwin, because there does not appear to be a function available to do it.
+
 my $compiler = ExtUtils::CppGuess->new();
 
 if ($compiler->is_gcc) {
-    if ($^O =~ /cygwin|MSWin32/i) { # MinGW or Cygwin - untested
+    if ($^O =~ /MSWin32/i) { # MinGW - untested
         push @{$builder->extra_compiler_flags()}, "-DCPU86", "-DHAVE__CONTROLFP";
+        }
+    elsif ($^O =~ /cygwin/) {
+        # Use SSE2, which doesn't use extended precision doubles,
+        # or, if SSE2 flags don't work, hopefully fall back (-mpc64)
+        # to locking fpu into normal precision.
+        push @{$builder->extra_compiler_flags()}, "-march=native", "-mfpmath=sse", "-msse2", "-mpc64";
         }
     elsif ($^O =~ /linux/i) {
         push @{$builder->extra_compiler_flags()}, "-DLINUX", "-DHAVE__FPU_SETCW";
