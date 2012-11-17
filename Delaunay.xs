@@ -15,13 +15,13 @@
 /* triangle.h needs these two defines                 */
 /* REAL can be single or double, but I've used        */
 /* double everywhere in the code here, so use double. */
-/* VOID could be void, but Triangle sets it to int    */
-/* fool dumb compilers.                               */
-/* Set these same two defines in the Build.PL         */
-/* compiler flags in Build.PL                         */
+/* VOID should be void. Triangle sets it to int to    */
+/* "fool dumb compilers" but void looks like it's     */
+/* more portable.                                     */
+/* We also set REAL in the Build.PL compiler flags.   */
 
 #define REAL double
-#define VOID int
+#define VOID void
 
 #include "triangle.h"
 
@@ -220,13 +220,13 @@ doubleList(doubleArray * array, ... )
         /* setter */
         if (orig_items_cnt > 1) {
           switch (ix) {
-              case 1 :  if (p->pointlist)             {Safefree(p->pointlist);}             p->pointlist             = array ; p->numberofpoints  = (int) (ix_array)/2; break;
-              case 2 :  if (p->pointattributelist)    {Safefree(p->pointattributelist);}    p->pointattributelist    = array ; break;
-              case 3 :  if (p->triangleattributelist) {Safefree(p->triangleattributelist);} p->triangleattributelist = array ; break;
-              case 4 :  if (p->trianglearealist)      {Safefree(p->trianglearealist);}      p->trianglearealist      = array ; break;
-              case 5 :  if (p->holelist)              {Safefree(p->holelist);}              p->holelist              = array ; p->numberofholes   = (int) (ix_array)/2; break;
-              case 6 :  if (p->regionlist)            {Safefree(p->regionlist);}            p->regionlist            = array ; p->numberofregions = (int) (ix_array)/2; break;
-              case 7 :  if (p->normlist)              {Safefree(p->normlist);}              p->normlist              = array ; break;
+              case 1 :  if (p->pointlist)             {trifree(p->pointlist);}             p->pointlist             = array ; p->numberofpoints  = (int) (ix_array)/2; break;
+              case 2 :  if (p->pointattributelist)    {trifree(p->pointattributelist);}    p->pointattributelist    = array ; break;
+              case 3 :  if (p->triangleattributelist) {trifree(p->triangleattributelist);} p->triangleattributelist = array ; break;
+              case 4 :  if (p->trianglearealist)      {trifree(p->trianglearealist);}      p->trianglearealist      = array ; break;
+              case 5 :  if (p->holelist)              {trifree(p->holelist);}              p->holelist              = array ; p->numberofholes   = (int) (ix_array)/2; break;
+              case 6 :  if (p->regionlist)            {trifree(p->regionlist);}            p->regionlist            = array ; p->numberofregions = (int) (ix_array)/2; break;
+              case 7 :  if (p->normlist)              {trifree(p->normlist);}              p->normlist              = array ; break;
               }
           /* return count of how many items added */
           ST(0) = sv_newmortal();
@@ -274,13 +274,13 @@ intList( intArray * array, ... )
         /* setter */
         if (orig_items_cnt > 1) {
             switch (ix) {
-                case 1 :  if (p->pointmarkerlist)   {Safefree(p->pointmarkerlist);}   p->pointmarkerlist = array;   break;
-                case 2 :  if (p->trianglelist)      {Safefree(p->trianglelist);}      p->trianglelist = array;      p->numberoftriangles = (ix_array)/3; break;
-                case 3 :  if (p->neighborlist)      {Safefree(p->neighborlist);}      p->neighborlist = array;      break;
-                case 4 :  if (p->segmentlist)       {Safefree(p->segmentlist);}       p->segmentlist = array;       p->numberofsegments  = (ix_array)/2; break;
-                case 5 :  if (p->segmentmarkerlist) {Safefree(p->segmentmarkerlist);} p->segmentmarkerlist = array; break;
-                case 6 :  if (p->edgelist)          {Safefree(p->edgelist);}          p->edgelist = array;          p->numberofedges     = (ix_array)/2; break;
-                case 7 :  if (p->edgemarkerlist)    {Safefree(p->edgemarkerlist);}    p->edgemarkerlist = array;    break;
+                case 1 :  if (p->pointmarkerlist)   {trifree(p->pointmarkerlist);}   p->pointmarkerlist = array;   break;
+                case 2 :  if (p->trianglelist)      {trifree(p->trianglelist);}      p->trianglelist = array;      p->numberoftriangles = (ix_array)/3; break;
+                case 3 :  if (p->neighborlist)      {trifree(p->neighborlist);}      p->neighborlist = array;      break;
+                case 4 :  if (p->segmentlist)       {trifree(p->segmentlist);}       p->segmentlist = array;       p->numberofsegments  = (ix_array)/2; break;
+                case 5 :  if (p->segmentmarkerlist) {trifree(p->segmentmarkerlist);} p->segmentmarkerlist = array; break;
+                case 6 :  if (p->edgelist)          {trifree(p->edgelist);}          p->edgelist = array;          p->numberofedges     = (ix_array)/2; break;
+                case 7 :  if (p->edgemarkerlist)    {trifree(p->edgemarkerlist);}    p->edgemarkerlist = array;    break;
                 }
             /* return count of how many items added */
             ST(0) = sv_newmortal();
@@ -332,20 +332,20 @@ triio_DESTROY(Math::Geometry::Delaunay::Triangulateio THIS = NO_INIT)
             if (len != sizeof(THIS)) {
                 croak("Size %d of packed data != expected %d", len, sizeof(THIS));
                 }
-            if (p->pointlist)             {Safefree(p->pointlist);}
-            if (p->pointattributelist)    {Safefree(p->pointattributelist);}
-            if (p->pointmarkerlist)       {Safefree(p->pointmarkerlist);}
-            if (p->trianglelist)          {Safefree(p->trianglelist);}
-            if (p->triangleattributelist) {Safefree(p->triangleattributelist);}
-            if (p->trianglearealist)      {Safefree(p->trianglearealist);}
-            if (p->neighborlist)          {Safefree(p->neighborlist);}
-            if (p->segmentlist)           {Safefree(p->segmentlist);}
-            if (p->segmentmarkerlist)     {Safefree(p->segmentmarkerlist);}
-            if (p->holelist)              {Safefree(p->holelist);}
-            if (p->regionlist)            {Safefree(p->regionlist);}
-            if (p->pointlist)             {Safefree(p->edgelist);}
-            if (p->pointlist)             {Safefree(p->edgemarkerlist);}
-            if (p->pointlist)             {Safefree(p->normlist);}
+            if (p->pointlist)             {trifree(p->pointlist);}
+            if (p->pointattributelist)    {trifree(p->pointattributelist);}
+            if (p->pointmarkerlist)       {trifree(p->pointmarkerlist);}
+            if (p->trianglelist)          {trifree(p->trianglelist);}
+            if (p->triangleattributelist) {trifree(p->triangleattributelist);}
+            if (p->trianglearealist)      {trifree(p->trianglearealist);}
+            if (p->neighborlist)          {trifree(p->neighborlist);}
+            if (p->segmentlist)           {trifree(p->segmentlist);}
+            if (p->segmentmarkerlist)     {trifree(p->segmentmarkerlist);}
+            if (p->holelist)              {trifree(p->holelist);}
+            if (p->regionlist)            {trifree(p->regionlist);}
+            if (p->edgelist)              {trifree(p->edgelist);}
+            if (p->edgemarkerlist)        {trifree(p->edgemarkerlist);}
+            if (p->normlist)              {trifree(p->normlist);}
             }
         else { croak("THIS is not of type Math::Geometry::Delaunay::Triangulateio"); }
 

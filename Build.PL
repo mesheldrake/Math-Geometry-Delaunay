@@ -23,7 +23,6 @@ my $builder = Module::Build->new(
 
     extra_compiler_flags => [qw(
                                 -DREAL=double 
-                                -DVOID=int 
                                 -DTRILIBRARY 
                                 -DANSI_DECLARATORS 
                                 -DNO_TIMER
