@@ -61,6 +61,15 @@ if ($compiler->is_gcc) {
         # or, if SSE2 flags don't work, hopefully fall back (-mpc64)
         # to locking fpu into normal precision.
         push @{$builder->extra_compiler_flags()}, "-march=native", "-mfpmath=sse", "-msse2", "-mpc64";
+
+        # Cygwin's Perl 5.14, as of about June 2012, has usemymalloc=n, 
+        # so shouldn't get here, and should behave like most other Perls 
+        # that use the system's malloc/free.
+        # But Cygwin's older Perl 5.10 (and earlier?) has usemymalloc=y, so
+        # this substitutes "malloc" and "free" in Triangle with Perl's versions.
+        if ($builder->config('usemymalloc') eq 'y') {
+            push @{$builder->extra_compiler_flags()}, "-Dfree=Perl_mfree", "-Dmalloc=Perl_malloc";
+            } 
         }
     elsif ($^O =~ /linux/i) {
         push @{$builder->extra_compiler_flags()}, "-DLINUX", "-DHAVE__FPU_SETCW";
@@ -69,6 +78,23 @@ if ($compiler->is_gcc) {
     }
 elsif ($compiler->is_msvc) {
     push @{$builder->extra_compiler_flags()}, "-DCPU86", "-DHAVE__CONTROLFP";
+    }
+# Based on Perl configure hints that set usemymalloc=y for certain platforms
+# we blindly take the same approach that worked with Cygwin and Perl 5.10
+# for a few other platforms to get free() working without crashing, we hope.
+# 
+# Untested.
+elsif (
+    $builder->config('usemymalloc') eq 'y' &&
+        (
+        $builder->config('archname') eq 'OPENSTEP-Mach' || # NeXT 4
+        $^O eq 'unicosmk' || # Cray ca. 1995
+        $^O eq 'hpux' || 
+        $^O eq 'openbsd' ||
+        $builder->config('archname') =~ /super.?ux/i # maybe, NEC supercomputer OS
+        )
+    ) {
+    push @{$builder->extra_compiler_flags()}, "-Dfree=Perl_mfree", "-Dmalloc=Perl_malloc";
     }
 
 $builder->create_build_script();
