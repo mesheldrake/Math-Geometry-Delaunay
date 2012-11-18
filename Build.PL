@@ -7,11 +7,13 @@ my $builder = Module::Build->new(
     module_name         => 'Math::Geometry::Delaunay',
     license             => 'perl',
     dist_author         => q{Michael E. Sheldrake <sheldrake@cpan.org>},
-    configure_requires  => {'Module::Build'  => '0.38'},
+    configure_requires  => {
+        'Module::Build' => '0.38',
+        'ExtUtils::CppGuess' => 0,
+        },
     build_requires => {
         'Test::More' => 0,
         'ExtUtils::CBuilder' => 0,
-        'ExtUtils::CppGuess' => 0
     },
     c_source            => ['src'],
     xs_files            => {'Delaunay.xs' => 'lib/Math/Geometry/Delaunay.xs'},
