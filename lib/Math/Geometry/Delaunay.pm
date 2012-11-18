@@ -25,8 +25,6 @@ use constant {
 our @EXPORT_OK = qw(TRI_CONSTRAINED TRI_CONFORMING TRI_CCDT TRI_VORONOI);
 our @EXPORT = qw();
 
-my $point_inside_dist = 0.0001; # arbitrary. todo: eliminate
-
 sub new {
     my $class = shift;
     my $self = {};
