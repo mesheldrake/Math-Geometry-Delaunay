@@ -29,8 +29,8 @@ T_ARRAY
     /* so it should work with doubles and the largest ints that fit in your doubles. */
     /* The largest int that fits in double limit is then */
     /* the limit for number of points or edges in a trianglulation */
-    items--;
     U32 ix_$var = $argoff + 1;
+    items--;
     if (items>0) {
         $var = $ntype(items - $argoff + 1);
         while (items--) {

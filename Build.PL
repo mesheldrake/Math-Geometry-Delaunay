@@ -77,7 +77,7 @@ if ($compiler->is_gcc) {
     # else hope the system is in normal precision double mode by default
     }
 elsif ($compiler->is_msvc) {
-    push @{$builder->extra_compiler_flags()}, "-DCPU86", "-DHAVE__CONTROLFP";
+    push @{$builder->extra_compiler_flags()}, "-DCPU86";
     }
 # Based on Perl configure hints that set usemymalloc=y for certain platforms
 # we blindly take the same approach that worked with Cygwin and Perl 5.10

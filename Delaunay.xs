@@ -26,7 +26,6 @@
 #include "triangle.h"
 
 /* these let us refer to the struct in triangle.h    */
-/* without modifying its declaration to typdef style */
 
 typedef struct triangulateio *Math__Geometry__Delaunay__TriangulateioPtr;
 typedef struct triangulateio  Math__Geometry__Delaunay__Triangulateio;
@@ -70,10 +69,9 @@ _triangulate(arg0, arg1, arg2, arg3)
     Math::Geometry::Delaunay::TriangulateioPtr	arg3
     PREINIT:
       char * doVoronoi = 0;
+      XPFPA_DECLARE() /* declares vars to stash the floating point config */
     CODE:
       doVoronoi = strchr(arg0, 'v');
-      /* stash the current floating point config */
-      XPFPA_DECLARE()
       /* set normal double precision mode (triangle usually does this too) */
       XPFPA_SWITCH_DOUBLE()
       triangulate(arg0,arg1,arg2,arg3);
@@ -158,10 +156,11 @@ numberof(THIS, newval = 0)
         numberofedges              = 9
     PREINIT:
         struct triangulateio * p;
+        STRLEN len;
+        char *s;
     CODE:
         if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        STRLEN len;
-        char *s = SvPV((SV*)SvRV(ST(0)), len);
+        s = SvPV((SV*)SvRV(ST(0)), len);
         if (len != sizeof(THIS)) {croak("Size %d of packed data != expected %d", len, sizeof(THIS));}
         p = (struct triangulateio *) s;
         switch (ix) {
@@ -212,10 +211,11 @@ doubleList(doubleArray * array, ... )
     PREINIT:
         U32 size_RETVAL;
         struct triangulateio * p;
+        STRLEN len;
+        char *s;
         int orig_items_cnt = (int) items;
     CODE:
-        STRLEN len;
-        char *s = SvPV((SV*)SvRV(ST(0)), len);
+        s = SvPV((SV*)SvRV(ST(0)), len);
         p = (struct triangulateio *) s;
         /* setter */
         if (orig_items_cnt > 1) {
@@ -266,10 +266,11 @@ intList( intArray * array, ... )
     PREINIT:
         U32 size_RETVAL;
         struct triangulateio * p;
+        STRLEN len;
+        char *s;
         int orig_items_cnt = (int) items;
     CODE:
-        STRLEN len;
-        char *s = SvPV((SV*)SvRV(ST(0)), len);
+        s = SvPV((SV*)SvRV(ST(0)), len);
         p = (struct triangulateio *) s;
         /* setter */
         if (orig_items_cnt > 1) {
@@ -307,10 +308,12 @@ intList( intArray * array, ... )
 
 Math::Geometry::Delaunay::TriangulateioPtr
 to_ptr(Math::Geometry::Delaunay::Triangulateio THIS = NO_INIT)
+    PREINIT:
+        STRLEN len;
+        char *s;
     CODE:
         if (sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {
-            STRLEN len;
-            char *s = SvPV((SV*)SvRV(ST(0)), len);
+            s = SvPV((SV*)SvRV(ST(0)), len);
             if (len != sizeof(THIS)) { croak("Size %d of packed data != expected %d", len, sizeof(THIS)); }
             RETVAL = (struct triangulateio *)s;
             }
@@ -322,9 +325,10 @@ void *
 triio_DESTROY(Math::Geometry::Delaunay::Triangulateio THIS = NO_INIT)
     PREINIT:
         struct triangulateio * p;
-    CODE:
         STRLEN len;
-        char *s = SvPV((SV*)SvRV(ST(0)), len);
+        char *s;
+    CODE:
+        s = SvPV((SV*)SvRV(ST(0)), len);
         if (len != sizeof(THIS)) {croak("In DESTROY, size %d of packed data != expected %d", len, sizeof(THIS));}
         p = (struct triangulateio *) s;
 
