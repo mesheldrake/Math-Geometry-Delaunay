@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.03 Sunday Nov 19 08:43:00 2012
+
+  - added ExtUtils::CppGuess as a configure requirement for Build.PL
+
 0.02 Sunday Nov 18 02:04:00 2012
 
   - now builds with MSVC 2012
