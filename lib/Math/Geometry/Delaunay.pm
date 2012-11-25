@@ -1115,17 +1115,41 @@ topology is the second item returned.
                   {
                   nodes    => [noderef0, noderef1], # only one for a ray
                   elements => [elemref0, elemref1], # one if on boundary
-                  vector   => undefined or [x, y]   # ray direction
+                  vector   => undefined or [x, y],  # ray direction
                   marker   => 1 or 0 or undefined,  # boundary marker
+                  index    => <integer> # edge's index in edge list
                   },
                   ... more edges like that
                     
                 ],
     segments => [
-                  { same structure as edges },
+                  {
+                  nodes    => [noderef0, noderef1],
+                  elements => [elemref0, elemref1], # one if on boundary
+                  marker   => 1 or 0 or undefined   # boundary marker
+                  },
                   ... more segments
                 ]
     }
+
+=head3 cross-referencing Delaunay and Voronoi
+
+Corresponding edges in the Delaunay and Voronoi outputs have the same index
+number in their respective edge lists. 
+
+In the topological output, any edge in a triangulation has a record of its own 
+index number that can by used to look up the corresponding edge in the Voronoi 
+diagram topology, or vice versa, like so:
+
+    ($topo, $voronoi_topo) = $tri->triangulate('ev');
+    
+    # get an edge reference where it's not obvious what the edge's index is
+    
+    $delaunay_edge = $topo->{nodes}->[-1]->{edges}->[-1];
+    
+    # this gets a reference to the corresponding edge in the Voronoi diagram
+    
+    $voronoi_edge = $voronoi_topo->{edges}->[$delaunay_edge->{index}];
 
 =head1 METHODS TO SET SOME Triangle OPTIONS
 
