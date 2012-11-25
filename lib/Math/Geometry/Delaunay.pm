@@ -433,8 +433,8 @@ sub topology {
     my @nodes = map {{ point => $_, attributes => [], marker => undef, elements => [], edges => [] , segments => []}} ltolol(2,$triio->pointlist);
     my @eles  = map {my $ele={ nodes=>[map {$nodes[$_]} @{$_}],edges => [], neighbors => [], marker => undef, attributes => [] };map {push @{$_->{elements}},$ele} @{$ele->{nodes}};$ele} ltolol($triio->numberofcorners,$triio->trianglelist);
     my $ecnt = 0; # The index for edges will be the link between Delaunay and Voronoi topology pairs.
-    my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} @{$_}],marker => undef, elements => [], vector => undef, index => $ecnt++};map {push @{$_->{edges}   },$edg} @{$edg->{nodes}};$isVoronoi = 1 if ($_->[0] == -1 || $_->[1] == -1);$edg} ltolol(2,$triio->edgelist);
-    my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]} @{$_}],marker => undef, elements => [] };map {push @{$_->{segments}},$edg} @{$edg->{nodes}};$edg} ltolol(2,$triio->segmentlist);
+    my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} grep {$_>-1} @{$_}],marker => undef, elements => [], vector => undef, index => $ecnt++};foreach (@{$edg->{nodes}}) {push @{$_->{edges}   },$edg};$isVoronoi = 1 if ($_->[0] == -1 || $_->[1] == -1);$edg} ltolol(2,$triio->edgelist);
+    my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]}              @{$_}],marker => undef, elements => []                                   };foreach (@{$edg->{nodes}}) {push @{$_->{segments}},$edg};                                                   $edg} ltolol(2,$triio->segmentlist);
  
     my @elementattributes;
     if ($triio->numberoftriangleattributes) {
