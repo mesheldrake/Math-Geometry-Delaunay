@@ -102,7 +102,7 @@ sub verbose { # 0 to 3
     return $_[0]->{V};
     }
 
-# everything to add input geometery
+# everything to add input geometry
 
 sub addRegion {
     my $self = shift;
@@ -458,7 +458,7 @@ sub topology {
     for (my $i=0;$i<@edgemarkers;$i++) {
         $edges[$i]->{marker} = $edgemarkers[$i];
         }
-    my @segmentmarkers = $triio->segmentmarkerlist; # because some can be internal to boundarys
+    my @segmentmarkers = $triio->segmentmarkerlist; # because some can be internal to boundaries
     for (my $i=0;$i<@segmentmarkers;$i++) {
         $segs[$i]->{marker} = $segmentmarkers[$i];
         }
@@ -545,7 +545,7 @@ sub get_point_in_polygon {
 
     my @intersections = grep {
         # print "interdist: ",$_->[2],"\n";
-        # Note the filting out of very-near-zero distance intersections -
+        # Note the filtering out of very-near-zero distance intersections -
         # There should always be two intersections where the base of 
         # the test ray sits on the $poly->[$bottom_left_index] point:
         # one intersection for each adjacent segment. Better to get them
@@ -1021,7 +1021,7 @@ L<http://www.cs.cmu.edu/~quake/triangle.switch.html>
     my $tri = Math::Geometry::Delaunay->new(TRI_CCDT, 'q15', 'a3.5');
 
 
-Options set by switches passed to C<new()> may be overriden later by the 
+Options set by switches passed to C<new()> may be overridden later by the 
 corresponding option-setting methods, any time before C<triangulate()> 
 is invoked.
 
@@ -1073,16 +1073,16 @@ has boundary marker 0.
 The ray flag is 0 if the edge is not a ray, or 1 or 2, to indicate 
 which vertex is actually a unit vector indicating the direction of the ray.
 
-Import of the mesh data from the C data structures will be defered until
+Import of the mesh data from the C data structures will be deferred until
 actually requested from the list fetching methods above. For speed and 
-lower memory footprint, access only what you need, and consider supressing 
+lower memory footprint, access only what you need, and consider suppressing 
 output you don't need with option switches.
 
 =head3 topological output
 
 When triangulate is invoked in scalar or array context, it returns a hash ref 
 containing the cross-referenced nodes, elements, edges, and PSLG segments of the
-triangulation. In array context, with the "v" switch enabled, the Voroni
+triangulation. In array context, with the "v" switch enabled, the Voronoi
 topology is the second item returned.
 
     my $topology = $tri->triangulate();
@@ -1147,7 +1147,7 @@ With one argument, sets the minimum angle allowed for triangles added in the
 triangulation. Returns the value supplied. With no argument, returns the
 current minimum angle constraint.
 
-Passing -1 to C<minimum_angle()> will cause the "q" switch to be ommited from
+Passing -1 to C<minimum_angle()> will cause the "q" switch to be omitted from
 the option string.
 
 =head2 doEdges, doVoronoi, doNeighbors
@@ -1163,9 +1163,9 @@ the "Q" switch is present. This module includes the "Q" switch by default, but
 you can override this by passing a false value to C<quiet()>.
 
 If you would like to see even more output regarding the triangulation process,
-there are are three levels of verbosity configuarable with repeated "V"
+there are are three levels of verbosity configurable with repeated "V"
 switches. Passing a number from 1 to 3 to the C<verbose()> method will enable 
-the correspoinding level of verbosity.
+the corresponding level of verbosity.
 
 =head1 METHODS TO ADD VERTICES AND SEGMENTS
 
@@ -1315,7 +1315,7 @@ The elements in the list have this structure:
 
 Returns a reference to a list of segments.
 
-    $segs  = $tri->segments(); # retrive the PSLG segments
+    $segs  = $tri->segments(); # retrieve the PSLG segments
 
 The segments in the list have this structure:
 
@@ -1325,7 +1325,7 @@ The segments in the list have this structure:
 
 Returns a reference to a list of edges.
 
-    $edges  = $tri->edges();    # retrive all the triangle edges
+    $edges  = $tri->edges();    # retrieve all the triangle edges
 
 The edges in the list have this structure:
 
@@ -1373,7 +1373,7 @@ at some point to hide them completely behind a less idiosyncratic interface.
 
 Michael E. Sheldrake, C<< <sheldrake at cpan.org> >>
 
-Triangle's author is Jonathan Richard Shewchuck
+Triangle's author is Jonathan Richard Shewchuk
 
 
 =head1 BUGS
@@ -1429,9 +1429,9 @@ or the Artistic License.
 
 See http://dev.perl.org/licenses/ for more information.
 
-=head2 Triangle licence
+=head2 Triangle license
 
-B<Triangle> by Jonathan Richard Shewchuck, copyright 2005, includes the following
+B<Triangle> by Jonathan Richard Shewchuk, copyright 2005, includes the following
 notice in the C source code. Please refer to the C source, included in with this
 Perl module distribution, for the full notice.
 
