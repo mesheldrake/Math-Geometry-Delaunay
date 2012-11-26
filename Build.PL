@@ -54,8 +54,11 @@ my $builder = Module::Build->new(
 
 my $compiler = ExtUtils::CppGuess->new();
 
-if ($compiler->is_gcc) {
-    if ($^O =~ /MSWin32/i) { # MinGW - untested
+if ($compiler->is_msvc) {
+    push @{$builder->extra_compiler_flags()}, "-DCPU86";
+    }
+else {
+    if ($^O =~ /MSWin32/i && $compiler->is_gcc) { # MinGW
         push @{$builder->extra_compiler_flags()}, "-DCPU86", "-DHAVE__CONTROLFP";
         }
     elsif ($^O =~ /cygwin/) {
@@ -76,27 +79,27 @@ if ($compiler->is_gcc) {
     elsif ($^O =~ /linux/i) {
         push @{$builder->extra_compiler_flags()}, "-DLINUX", "-DHAVE__FPU_SETCW";
         }
+
+    # Based on Perl configure hints that set usemymalloc=y for certain platforms
+    # we blindly take the same approach that worked with Cygwin and Perl 5.10
+    # for a few other platforms to get free() working without crashing, we hope.
+    # Untested.
+    elsif (
+        $builder->config('usemymalloc') eq 'y' &&
+            (
+            $builder->config('archname') eq 'OPENSTEP-Mach' || # NeXT 4
+            $^O eq 'unicosmk' || # Cray ca. 1995
+            $^O eq 'hpux' || 
+            $^O eq 'openbsd' ||
+            $builder->config('archname') =~ /super.?ux/i # maybe, NEC supercomputer OS
+            )
+        ) {
+        push @{$builder->extra_compiler_flags()}, "-Dfree=Perl_mfree", "-Dmalloc=Perl_malloc";
+        }
+
     # else hope the system is in normal precision double mode by default
+
     }
-elsif ($compiler->is_msvc) {
-    push @{$builder->extra_compiler_flags()}, "-DCPU86";
-    }
-# Based on Perl configure hints that set usemymalloc=y for certain platforms
-# we blindly take the same approach that worked with Cygwin and Perl 5.10
-# for a few other platforms to get free() working without crashing, we hope.
-# 
-# Untested.
-elsif (
-    $builder->config('usemymalloc') eq 'y' &&
-        (
-        $builder->config('archname') eq 'OPENSTEP-Mach' || # NeXT 4
-        $^O eq 'unicosmk' || # Cray ca. 1995
-        $^O eq 'hpux' || 
-        $^O eq 'openbsd' ||
-        $builder->config('archname') =~ /super.?ux/i # maybe, NEC supercomputer OS
-        )
-    ) {
-    push @{$builder->extra_compiler_flags()}, "-Dfree=Perl_mfree", "-Dmalloc=Perl_malloc";
-    }
+
 
 $builder->create_build_script();
