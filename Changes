@@ -1,5 +1,11 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.04 Sunday nov 25 16:04:00 2012
+
+  - bugfix: last edge in voronoi topology had references to all rays
+  - documented edge list cross referencing
+  - might build on OpenBSD now
+
 0.03 Sunday Nov 19 08:43:00 2012
 
   - added ExtUtils::CppGuess as a configure requirement for Build.PL
