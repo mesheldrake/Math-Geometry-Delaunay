@@ -432,9 +432,11 @@ sub topology {
 
     my $isVoronoi = 0; # we'll detect this when reading edges
 
-    my @nodes = map {{ point => $_, attributes => [], marker => undef, elements => [], edges => [] , segments => []}} ltolol(2,$triio->pointlist);
-    my @eles  = map {my $ele={ nodes=>[map {$nodes[$_]} @{$_}],edges => [], neighbors => [], marker => undef, attributes => [] };map {push @{$_->{elements}},$ele} @{$ele->{nodes}};$ele} ltolol($triio->numberofcorners,$triio->trianglelist);
-    my $ecnt = 0; # The index for edges will be the link between Delaunay and Voronoi topology pairs.
+    my $pcnt = 0; # In Voronoi diagram node index corresponds to dual Delaunay element.
+    my @nodes = map {{ point => $_, attributes => [], marker => undef, elements => [], edges => [] , segments => [], index => $pcnt++}} ltolol(2,$triio->pointlist);
+    my $tcnt = 0; # In Delaunay triangulation element index corresponds to dual Voronoi node.
+    my @eles  = map {my $ele={ nodes=>[map {$nodes[$_]} @{$_}],edges => [], neighbors => [], marker => undef, attributes => [], index => $tcnt++ };map {push @{$_->{elements}},$ele} @{$ele->{nodes}};$ele} ltolol($triio->numberofcorners,$triio->trianglelist);
+    my $ecnt = 0; # Corresponding edges in the Delaunay and Voronoi topologies will have the same index.
     my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} grep {$_>-1} @{$_}],marker => undef, elements => [], vector => undef, index => $ecnt++};foreach (@{$edg->{nodes}}) {push @{$_->{edges}   },$edg};$isVoronoi = 1 if ($_->[0] == -1 || $_->[1] == -1);$edg} ltolol(2,$triio->edgelist);
     my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]}              @{$_}],marker => undef, elements => []                                   };foreach (@{$edg->{nodes}}) {push @{$_->{segments}},$edg};                                                   $edg} ltolol(2,$triio->segmentlist);
  
@@ -1586,6 +1588,24 @@ topology is the second item returned.
     }
 
 =head3 cross-referencing Delaunay and Voronoi
+
+Corresponding Delaunay triangles and Voronoi nodes have the same index number
+in their respective lists.
+
+In the topological output, any element in a triangulation has a record of its 
+own index number that can by used to look up the corresponding node in the 
+Voronoi diagram topology, or vice versa, like so:
+
+    ($topo, $voronoi_topo) = $tri->triangulate('v');
+
+    # get a triangle reference where the index is not obvious
+    
+    $element = $topo->{nodes}->[-1]->{elements}->[-1];
+    
+    # this gets a reference to the corresponding node in the Voronoi diagram
+    
+    $voronoi_node = $voronoi_topo->{nodes}->[$element->{index}];
+
 
 Corresponding edges in the Delaunay and Voronoi outputs have the same index
 number in their respective edge lists. 
