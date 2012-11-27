@@ -1829,7 +1829,7 @@ The edges in the list have this structure:
     [[x0, y0], [x1, y1], < boundary marker >]
 
 Note that the edge list is not produced by default. Request that it be generated
-by invoking doEdges(1), or passing the 'e' switch to C<triangulate()>.
+by invoking C<doEdges(1)>, or passing the 'e' switch to C<triangulate()>.
 
 =head2 vnodes
 
@@ -1856,6 +1856,43 @@ If the edge is a true edge, the ray flag will be 0.
 If the edge is actually a ray, the ray flag will either be 1 or 2,
 to indicate whether the the first, or second vertex should be interpreted as
 a direction vector for the ray.
+
+=head1 UTILITY FUNCTIONS
+
+=head2 mic_adjust
+
+Warning: not yet thoroughly tested; may move elsewhere
+
+One use of the Voronoi diagram of a tessellated polygon is to derive an
+approximation of the polygon's medial axis by pruning infinite rays and perhaps
+trimming or refining remaining branches. The approximation improves as
+intervals between sample points on the polygon become shorter. But it's not 
+always desirable to multiply the number of polygon points to achieve short
+intervals.
+
+At any point on the true medial axis, there is a maximally inscribed circle,
+with it's center on the medial axis, and tangent to the polygon in at least
+two places. The C<mic_adjust()> function uses the triangulation and Voronoi
+diagram topologies to move each Voronoi node to a location where it is tangent
+to the polygon at two points. It then stores the radius from node to tangent
+in the node. After calling c<mic_adjust()>, the modified Voronoi topology can 
+be used as a list of maximal inscribed circles, which can be used to derive a
+straighter, better medial axis approximation, without having to increase the
+number of sample points on the polygon.
+
+    ($topo, $voronoi_topo) = $tri->triangulate('e');
+
+    mic_adjust($topo, $voronoi_topo); # modifies $voronoi_topo in place
+    
+    $maximal_inscribed_circle = $voronoi_topo->{nodes}->[0];
+    
+    $center = $maximal_inscribed_circle->{point};
+    $radius = $maximal_inscribed_circle->{radius};
+
+Deriving a medial axis approximation by walking and pruning the topology is
+left to you. Constructing a true medial axis is much more involved - a 
+subject for a different module. Until that module appears, C<mic_adjust()> 
+might help fill the gap.
 
 =head1 API STATUS
 
