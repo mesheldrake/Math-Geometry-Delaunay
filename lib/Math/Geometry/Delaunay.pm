@@ -19,11 +19,13 @@ use constant {
     TRI_CONSTRAINED  => 'Y',
     TRI_CONFORMING   => 'Dq0',
     TRI_CCDT         => 'q',
-    TRI_VORONOI      => 'v'
+    TRI_VORONOI      => 'v',
     };
 
 our @EXPORT_OK = qw(TRI_CONSTRAINED TRI_CONFORMING TRI_CCDT TRI_VORONOI);
 our @EXPORT = qw();
+
+my $pi = atan2(1,1)*4;
 
 sub new {
     my $class = shift;
@@ -32,14 +34,14 @@ sub new {
     $self->{out}    = undef;
     $self->{vorout} = undef;
     $self->{poly}   = {
-	regions      => [],
-	holes        => [],
-	polylines    => [],
-	points       => [],
-	segments     => [],
+    regions      => [],
+    holes        => [],
+    polylines    => [],
+    points       => [],
+    segments     => [],
         outnodes     => [], #for cache, first time C output arrays are imported
         voutnodes    => [], #for cache
-        segptrefs    => {},  #used to avoid dups of points added with addSegment
+        segptrefs    => {}, #used to avoid dups of points added with addSegment
         };
 
     $self->{optstr} = '';
@@ -670,6 +672,457 @@ sub seg_poly_intersections {
     return @intersections;
     }
 
+# Adjust location of nodes in voronoi diagram so they become 
+# centers of maximally inscribed circles, and store MIC radius in each node.
+# This is a first step towards a better medial axis approximation.
+# It straightens out the initial MA approx. derived from the Voronoi diagram.
+
+sub mic_adjust {
+    my $topo = shift;
+    my $vtopo = shift;
+
+    my @new_vnode_points; # voronoi vertices moved to MIC center points
+    my @new_vnode_radii;  # will be calculated and added to node data
+
+    my $dsioff=scalar(@{$topo->{nodes}});
+
+    my $vnc=-1; # will use to look up triangle that corresponds to the voronoi node
+
+    foreach my $vnode (@{$vtopo->{nodes}}) {
+        $vnc++;
+
+        push(@new_vnode_points,$vnode->{point});
+        push(@new_vnode_radii,dist2d($vnode->{point},$topo->{edges}->[$vnode->{edges}->[0]->{index}]->{nodes}->[0]->{point}));
+
+        my $boundary_edge;
+
+        if (@{$vnode->{edges}} == 3) {
+            my @all_edges = map {$topo->{edges}->[$_->{index}]} @{$vnode->{edges}};
+            my @boundary_edges = grep {$_->{marker}} @all_edges;
+
+            @boundary_edges = sort {dist2d($b->{nodes}->[0]->{point},$b->{nodes}->[1]->{point}) 
+                                    <=> 
+                                    dist2d($a->{nodes}->[0]->{point},$a->{nodes}->[1]->{point})} 
+                                    @boundary_edges;        
+
+            my $opposite_node;
+            my @opposite_boundary_edges;
+            my @opposite_boundary_feet;
+
+            if (@boundary_edges == 0) {
+                # triangle that touches boundary only at it's three vertices
+                # and not any of it's edges
+                
+                # vnode and delaunay tri lists correspond
+                my @corner_boundary_edges = grep $_->{marker}, map @{$_->{edges}}, @{$topo->{elements}->[$vnc]->{nodes}};
+                my @corner_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @corner_boundary_edges;
+
+                # this case not handled at the moment
+                # it may be that this is usually safe to leave alone
+                if (! grep $_, @corner_boundary_feet) {
+                    next;
+                    }
+
+                my @boundary_feet_edges;
+                for (my $i=0;$i<@corner_boundary_feet;$i+=2) {
+                    my $foot;
+                    my $edge;
+                    # if no foot was found on the two edges meeting at
+                    # one of the triangle's vertices, make the vertex a "fake foot"
+                    if (!$corner_boundary_feet[$i] && !$corner_boundary_feet[$i+1]) {
+                        my $foot = (   $corner_boundary_edges[$i]->{nodes}->[0] == $corner_boundary_edges[$i+1]->{nodes}->[0]
+                                    || $corner_boundary_edges[$i]->{nodes}->[0] == $corner_boundary_edges[$i+1]->{nodes}->[1] )
+                                   ? $corner_boundary_edges[$i]->{nodes}->[0]->{point}
+                                   : $corner_boundary_edges[$i]->{nodes}->[1]->{point};
+                        # edge left undefined to signal this case
+                        push @boundary_feet_edges, [$foot,undef];
+                        }
+                    else {
+                        if ($corner_boundary_feet[$i]  ) {push @boundary_feet_edges, [$corner_boundary_feet[$i],  $corner_boundary_edges[$i]];}
+                        if ($corner_boundary_feet[$i+1]) {push @boundary_feet_edges, [$corner_boundary_feet[$i+1],$corner_boundary_edges[$i+1]];}
+                        }
+                    }
+
+                @boundary_feet_edges = sort {dist2d($a->[0],$vnode->{point}) <=> dist2d($b->[0],$vnode->{point})} @boundary_feet_edges;
+
+                my $first_with_edge = +(grep {$_->[1]} @boundary_feet_edges)[0];
+                $boundary_edge = {nodes=>[$first_with_edge->[1]->{nodes}->[0],$first_with_edge->[1]->{nodes}->[1]]};
+
+                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
+                $opposite_boundary_feet[0]  = $first_not_first_with_edge->[0];
+                $opposite_boundary_edges[0] = $first_not_first_with_edge->[1];
+                }
+
+            if (@boundary_edges == 1
+                || @boundary_edges == 2
+                ) {
+                $boundary_edge=$boundary_edges[0];
+                my @other_edges = grep $_ != $boundary_edge, map $topo->{edges}->[$_->{index}], @{$vnode->{edges}};
+                $opposite_node = +(grep {$_ != $boundary_edge->{nodes}->[0] && $_ != $boundary_edge->{nodes}->[1]} @{$other_edges[1]->{nodes}})[0];
+                @opposite_boundary_edges = grep {$_->{marker}} @{$opposite_node->{edges}};
+                @opposite_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @opposite_boundary_edges;
+
+                if (@boundary_edges == 1) { # should apply to ==2 too, but should screen out the "opposite" that is also "adjacent" in that case
+                    my @adjacent_boundary_edges = grep $_->{marker} && $_ != $boundary_edge, map @{$_->{edges}}, @{$boundary_edge->{nodes}};
+                    my @adjacent_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @adjacent_boundary_edges;
+                    # if any adjacent bounds closer, replace bound_edge[0] with closest
+                    my $ber = sqrt(($vnode->{point}->[0]-$boundary_edge->{nodes}->[0]->{point}->[0])**2 + ($vnode->{point}->[1]-$boundary_edge->{nodes}->[0]->{point}->[1])**2);
+                    for (my $i = 0; $i < @adjacent_boundary_feet; $i++) {
+                        next if !$adjacent_boundary_feet[$i];
+                        if (sqrt(($adjacent_boundary_feet[$i]->[0]-$vnode->{point}->[0])**2 + ($adjacent_boundary_feet[$i]->[1]-$vnode->{point}->[1])**2) < $ber) {
+                            $boundary_edge = $adjacent_boundary_edges[$i];
+                            }
+                        }
+                    }
+
+                if (!grep $_, @opposite_boundary_feet) {
+                    # make the foot just the opposite point
+                    @opposite_boundary_feet = ($opposite_node->{point});
+                    # make edge eval to false to signal this fake foot case
+                    @opposite_boundary_edges = map {0} @opposite_boundary_edges;
+                    }
+
+                }
+
+            # Only one defined unique foot should be in @opposite_boundary_feet
+            # at this point.
+            for (my $i = 0; $i < @opposite_boundary_feet; $i++) {
+                next if !$opposite_boundary_feet[$i];
+                my $foot = $opposite_boundary_feet[$i];
+                my $opp_edge = $opposite_boundary_edges[$i];
+
+                my $a1;
+                if ($opp_edge) {
+                    $a1 = atan2($opp_edge->{nodes}->[0]->{point}->[1] - $opp_edge->{nodes}->[1]->{point}->[1],
+                                $opp_edge->{nodes}->[0]->{point}->[0] - $opp_edge->{nodes}->[1]->{point}->[0]);
+                    }
+                else { # the "fake foot" case, where opposite edge is just a point
+                    $a1 = atan2($opposite_node->{point}->[1] - $vnode->{point}->[1],
+                                $opposite_node->{point}->[0] - $vnode->{point}->[0]);
+                    $a1 -= $pi / 2;
+                    }
+
+                my $a2 = atan2($boundary_edge->{nodes}->[1]->{point}->[1] - $boundary_edge->{nodes}->[0]->{point}->[1],
+                               $boundary_edge->{nodes}->[1]->{point}->[0] - $boundary_edge->{nodes}->[0]->{point}->[0]);
+
+                $a1 = angle_reduce_pi($a1);
+                $a2 = angle_reduce_pi($a2);
+
+                my $amid = ($a1 + $a2) / 2;
+                my $amidnorm = $amid + $pi / 2;
+
+                $amid = angle_reduce($amid);
+                $amidnorm = angle_reduce($amidnorm);
+
+                my $boundtanpt = line_line_intersection(
+                      [ $boundary_edge->{nodes}->[0]->{point}, $boundary_edge->{nodes}->[1]->{point} ],
+                      [ $foot, [$foot->[0] + 100 * cos($amidnorm), $foot->[1] + (100 * sin($amidnorm))] ],
+                      );
+
+                if ($boundtanpt) {
+                    my $midpt=[($foot->[0]+$boundtanpt->[0])/2,($foot->[1]+$boundtanpt->[1])/2];
+                    my $nother_mid_pt=[$midpt->[0]-100*cos($amid),$midpt->[1]-100*sin($amid)];
+                    my $center = line_line_intersection([$vnode->{point},$foot],[$midpt,$nother_mid_pt]);
+                    if ($center) {
+                        $new_vnode_points[-1] = $center;
+                        $new_vnode_radii[-1] = dist2d($center,$foot);
+                        }
+                    }
+                }
+            }
+        }
+    for (my $i = 0; $i < @{$vtopo->{nodes}}; $i++) {
+        $vtopo->{nodes}->[$i]->{point} = $new_vnode_points[$i];
+        $vtopo->{nodes}->[$i]->{radius} = $new_vnode_radii[$i];
+        }
+    }
+
+sub getFoot {
+    my $seg = shift;
+    my $x = shift;
+    my $y = shift;
+    my $foot;
+    my $m  = ($seg->[1]->[0] - $seg->[0]->[0] == 0) ? 'inf' : ($seg->[1]->[1] - $seg->[0]->[1])/($seg->[1]->[0] - $seg->[0]->[0]);
+    my @sortx = $seg->[0]->[0] < $seg->[1]->[0] ? ($seg->[0]->[0], $seg->[1]->[0]) : ($seg->[1]->[0], $seg->[0]->[0]);
+    my @sorty = $seg->[0]->[1] < $seg->[1]->[1] ? ($seg->[0]->[1], $seg->[1]->[1]) : ($seg->[1]->[1], $seg->[0]->[1]);
+    if ($m eq 0) {
+        if ($x >= $sortx[0] && $x <= $sortx[1]) {$foot=[$x, $seg->[0]->[1]];}
+        }
+    elsif ($m =~ /inf/) {
+        if ($y >= $sorty[0] && $y <= $sorty[1]) {$foot=[$seg->[0]->[0], $y];}
+        }
+    else {
+        my $intersect_x = (($m*$seg->[0]->[0])-($seg->[0]->[1])+((1/$m)*$x)+($y))/($m+(1/$m));
+        if ($intersect_x >= $sortx[0] && $intersect_x <= $sortx[1]) {
+            my $intersect_y = -($seg->[0]->[0] - $intersect_x) * $m + $seg->[0]->[1];
+            if ($intersect_y >= $sorty[0] && $intersect_y <= $sorty[1]) {
+                $foot = [$intersect_x, $intersect_y];
+                }
+            }
+        }
+    return $foot;
+    }
+
+sub angle_reduce {
+    my $a=shift;
+    while($a >   $pi / 2) { $a -= $pi; }
+    while($a <= -$pi / 2) { $a += $pi; }
+    return $a;
+    }
+
+sub angle_reduce_pi {
+    my $a=shift;
+    while($a >   $pi) { $a -= $pi * 2; }
+    while($a <= -$pi) { $a += $pi * 2; }
+    return $a;
+    }
+
+sub seg_seg_intersection {
+    my $seg1 = shift;
+    my $seg2 = shift;
+    my $int;
+
+    my $x1= $seg1->[0]->[0]; my $y1= $seg1->[0]->[1];
+    my $x2= $seg1->[1]->[0]; my $y2= $seg1->[1]->[1];
+    my $u1= $seg2->[0]->[0]; my $v1= $seg2->[0]->[1];
+    my $u2= $seg2->[1]->[0]; my $v2= $seg2->[1]->[1];
+
+    my $m1 = ($x2 eq $x1)?'Inf':($y2 - $y1)/($x2 - $x1);
+    my $m2 = ($u2 eq $u1)?'Inf':($v2 - $v1)/($u2 - $u1);
+
+    my $b1;
+    my $b2;
+
+    my  $xi;
+    my $dm = $m1 - $m2;
+    if    ($m1 eq 'Inf' && $m2 ne 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
+    elsif ($m2 eq 'Inf' && $m1 ne 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
+    elsif (abs($dm) > 0.000000000001) {
+        $b1 = $y1 - ($m1 * $x1);
+        $b2 = $v1 - ($m2 * $u1);    
+        $xi=($b2-$b1)/$dm;
+        }
+    my @lowhiu=($u2>$u1)?($u1,$u2):($u2,$u1);
+    if ($m1 ne 'Inf') {
+        my @lowhix=($x2>$x1)?($x1,$x2):($x2,$x1);
+        if ($m2 eq 'Inf' &&   ($u2<$lowhix[0] || $u2>$lowhix[1]) ) {
+            return;
+            }
+        if (
+            ($xi || $xi eq 0) &&
+            ($xi < $lowhix[1] || $xi eq $lowhix[1]) && 
+            ($xi > $lowhix[0] || $xi eq $lowhix[0]) &&
+            ($xi < $lowhiu[1] || $xi eq $lowhiu[1]) && 
+            ($xi > $lowhiu[0] || $xi eq $lowhiu[0])
+            ) {
+            my $y=($m1*$xi)+$b1;
+            my @lowhiv=($v2>$v1)?($v1,$v2):($v2,$v1);
+            if ($m2 eq 'Inf' &&
+                $y<$lowhiv[0] || $y>$lowhiv[1]
+                ) {
+                return;
+                }
+            else {
+                $int = [$xi,$y];
+                }
+            }
+        }
+    elsif ($m2 ne 'Inf') {#so $m1 is Inf
+
+        if ($x1 < $lowhiu[0] || $x1 > $lowhiu[1] && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
+            return;
+            }
+        my @lowhiy=($y2>$y1)?($y1,$y2):($y2,$y1);
+        my @lowhiv=($v2>$v1)?($v1,$v2):($v2,$v1);
+        my $yi = ($m2*$xi)+$b2;
+        if (($yi || $yi eq 0) &&
+            ($yi < $lowhiy[1] || $yi eq $lowhiy[1]) && 
+            ($yi > $lowhiy[0] || $yi eq $lowhiy[0]) &&
+            ($yi < $lowhiv[1] || $yi eq $lowhiv[1]) && 
+            ($yi > $lowhiv[0] || $yi eq $lowhiv[0])
+            ) {
+            $int = [$xi,$yi];
+            }
+        }
+    return $int;
+    }
+
+
+
+sub line_line_intersection {
+    my $seg1 = shift;
+    my $seg2 = shift;
+    my $int;
+
+    my $x1= $seg1->[0]->[0]; my $y1= $seg1->[0]->[1];
+    my $x2= $seg1->[1]->[0]; my $y2= $seg1->[1]->[1];
+    my $u1= $seg2->[0]->[0]; my $v1= $seg2->[0]->[1];
+    my $u2= $seg2->[1]->[0]; my $v2= $seg2->[1]->[1];
+
+    my $m1 = ($x2 eq $x1)?'Inf':($y2 - $y1)/($x2 - $x1);
+    my $m2 = ($u2 eq $u1)?'Inf':($v2 - $v1)/($u2 - $u1);
+
+    my $b1;
+    my $b2;
+
+    my  $xi;
+    my $dm = $m1 - $m2;
+    if    ($m1 eq 'Inf' && $m2 ne 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
+    elsif ($m2 eq 'Inf' && $m1 ne 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
+    elsif (abs($dm) > 0.000000000001) {
+        $b1 = $y1 - ($m1 * $x1);
+        $b2 = $v1 - ($m2 * $u1);    
+        $xi=($b2-$b1)/$dm;
+        }
+    if ($m1 ne 'Inf') {
+        if (
+            ($xi || $xi eq 0)
+            ) {
+            my $y=($m1*$xi)+$b1;
+            $int = [$xi,$y];
+            }
+        }
+    elsif ($m2 ne 'Inf') {# so $m1 is Inf
+        my $yi = ($m2*$xi)+$b2;
+        if (($yi || $yi eq 0)
+            ) {
+            $int = [$xi,$yi];
+            }
+        }
+    return $int;
+    }
+
+
+sub svgize {
+    my $triios=shift;
+    my $fn=shift;
+    my $triio = $triios->[0];
+    my $vorio = @{$triios}?$triios->[1]:undef;
+    my %spec = @_;
+    my @edges;
+    my @segs;
+    my @pts;
+    my @vpts;
+    my @vedges;
+    my @vrays;
+    my @circles;
+    my $maxx = 0;
+    my $maxy = 0;
+    if (!$triio) {warn "no good for svg";return;}
+
+    if (ref($triio) =~ /HASH/ && defined $triio->{nodes}) {
+        push @pts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;              [$_,defined $spec{points}  ? @{$spec{points}} : undef]} map $_->{point}, @{$triio->{nodes}};
+        if ($spec{edges})    {push @edges, map {[$_,@{$spec{edges}}]}    map [$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}], @{$triio->{edges}};}
+        if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}], @{$triio->{segments}};}
+        }
+    else {
+        push @pts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;              [$_,defined $spec{points}  ? @{$spec{points}} : undef]} ltolol(2,$triio->pointlist);
+        if ($spec{edges})    {push @edges, map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{edges}}]}    ltolol(2,$triio->edgelist);}
+        if ($spec{segments}) {push @segs,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{segments}}]} ltolol(2,$triio->segmentlist);}
+        }
+
+    if ($vorio) {
+        if (ref($vorio) =~ /HASH/ && defined $vorio->{nodes}) {
+            push @vpts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;[$_,defined $spec{vpoints} ?  @{$spec{vpoints}} : undef]} map $_->{point}, @{$vorio->{nodes}};
+            # circles only available in this case
+            if (defined $spec{circles}) {
+                push @circles, map {
+                                   [$_->{point},
+                                    defined $_->{radius} 
+                                        ? $_->{radius} 
+                                        : dist2d($_->{point},$edges[$_->{edges}->[0]->{index}]->[0]->[0]),
+                                    @{$spec{circles}}
+                                   ]
+                                   } @{$vorio->{nodes}};
+                }
+            @vedges = map [[$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
+            if (defined $spec{vrays}) {
+                @vrays  = map [[$_->{nodes}->[0]->{point},[@{$_->{vector}}]],(defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
+                foreach my $ray (@vrays) {
+                    $ray->[0]->[1]->[0] += $ray->[0]->[0]->[0];
+                    $ray->[0]->[1]->[1] += $ray->[0]->[0]->[1];
+                    }
+                }
+            }
+        else {
+            push @vpts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;[$_,defined $spec{vpoints} ?  @{$spec{vpoints}} : undef]} ltolol(2,$vorio->pointlist);
+            if ($spec{vedges})    {
+                my @ves   =ltolol(2,$vorio->edgelist);
+                my @vnorms=ltolol(2,$vorio->normlist);
+                for (my $i=0;$i<@ves;$i++) {
+                    if ($ves[$i]->[0] > -1 && $ves[$i]->[1] > -1) {
+                        push @vedges, [[$vpts[$ves[$i]->[0]]->[0],$vpts[$ves[$i]->[1]]->[0]],@{$spec{vedges}}];
+                        }
+                    elsif (defined $spec{vrays}) {
+                        my $baseidx = ($ves[$i]->[0] != -1)?0:1;
+                        my $basept = $vpts[$ves[$i]->[$baseidx]]->[0];
+                        my $vec = $vnorms[$i];
+                        my $h = sqrt($vec->[0]**2 + $vec->[1]**2);
+                        $vec = [$vec->[0]/$h,$vec->[1]/$h];
+                        push @vrays, [
+                            [$basept,[$basept->[0]+$vec->[0]*$maxx,$basept->[1]+$vec->[1]*$maxx]],
+                            (defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})];
+                        }
+                    }
+                }
+            }
+        }
+
+    my $dispsize=400;
+    my $scale=($dispsize*0.9)/$maxy;
+    #$scale=1;
+
+    open(SVGO,'>',$fn);
+    print SVGO sprintf <<"EOS", $dispsize, $dispsize, $maxx, $maxy, $maxy;
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
+<svg width="%s" height="%s" viewBox="0 0 %s %s" preservAspectRatio="minXminY meet" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
+<g transform="scale(1,-1) translate(0,-%s)">
+EOS
+
+    if ($spec{edges}) {print SVGO "\nedges\n";}
+    foreach my $edge (@edges) {
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        }
+    if ($spec{segments}) {print SVGO "\nsegments\n";}
+    foreach my $edge (@segs) {
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        }
+    if ($spec{vedges} && $vorio) {print SVGO "\nvor edges\n";}
+    foreach my $edge (@vedges) {
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        }
+    if ($spec{vrays} && $vorio) {print SVGO "\nvor rays\n";}
+    foreach my $edge (@vrays) {
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" ';
+        print SVGO 'style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        }
+    if ($spec{points}) {
+        print SVGO "\npts\n";
+        foreach my $pt (@pts) {
+            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', ($pt->[2]/$scale) ,'" style="fill:',$pt->[1],';"/>',"\n"
+            }
+        }
+    if ($spec{vpoints} && $vorio) {
+        print SVGO "\nvor pts\n";
+        foreach my $pt (@vpts) {
+            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', ($pt->[2]/$scale) ,'" style="fill:',$pt->[1],';"/>',"\n"
+            }
+        }
+    if ($spec{circles}) {print SVGO "\ncircles\n";}
+    foreach my $circle (@circles) {
+         print SVGO '<circle cx="',$circle->[0]->[0],'" cy="',$circle->[0]->[1],'" r="', ($circle->[1]) ,'" style="stroke-width:',($circle->[3]/$scale),';stroke:',$circle->[2],';fill:none;"/>',"\n"
+        }
+
+    if ($spec{raw}) {
+        print SVGO "\nraw svg\n";
+        print SVGO join("\n",@{$spec{raw}});
+        }
+    print SVGO '</g></svg>';
+    close(SVGO);
+    }
+
+sub dist2d {sqrt(($_[0]->[0]-$_[1]->[0])**2+($_[0]->[1]-$_[1]->[1])**2)}
 
 =head1 NAME
 
