@@ -750,7 +750,9 @@ sub mic_adjust {
                 my $first_with_edge = +(grep {$_->[1]} @boundary_feet_edges)[0];
                 $boundary_edge = {nodes=>[$first_with_edge->[1]->{nodes}->[0],$first_with_edge->[1]->{nodes}->[1]]};
 
-                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
+                #my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
+                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[-1];
+                
                 $opposite_boundary_feet[0]  = $first_not_first_with_edge->[0];
                 $opposite_boundary_edges[0] = $first_not_first_with_edge->[1];
                 }
@@ -767,8 +769,9 @@ sub mic_adjust {
                 if (@boundary_edges == 1) { # should apply to ==2 too, but should screen out the "opposite" that is also "adjacent" in that case
                     my @adjacent_boundary_edges = grep $_->{marker} && $_ != $boundary_edge, map @{$_->{edges}}, @{$boundary_edge->{nodes}};
                     my @adjacent_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @adjacent_boundary_edges;
-                    # if any adjacent bounds closer, replace bound_edge[0] with closest
-                    my $ber = sqrt(($vnode->{point}->[0]-$boundary_edge->{nodes}->[0]->{point}->[0])**2 + ($vnode->{point}->[1]-$boundary_edge->{nodes}->[0]->{point}->[1])**2);
+                    # if any adjacent bounds closer, replace $boundary_edge with closest
+                    my $bef = getFoot([$boundary_edge->{nodes}->[0]->{point},$boundary_edge->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
+                    my $ber = sqrt(($vnode->{point}->[0]-$bef->[0])**2 + ($vnode->{point}->[1]-$bef->[1])**2);
                     for (my $i = 0; $i < @adjacent_boundary_feet; $i++) {
                         next if !$adjacent_boundary_feet[$i];
                         if (sqrt(($adjacent_boundary_feet[$i]->[0]-$vnode->{point}->[0])**2 + ($adjacent_boundary_feet[$i]->[1]-$vnode->{point}->[1])**2) < $ber) {
@@ -808,13 +811,9 @@ sub mic_adjust {
                                $boundary_edge->{nodes}->[1]->{point}->[0] - $boundary_edge->{nodes}->[0]->{point}->[0]);
 
                 $a1 = angle_reduce_pi($a1);
-                $a2 = angle_reduce_pi($a2);
 
                 my $amid = ($a1 + $a2) / 2;
                 my $amidnorm = $amid + $pi / 2;
-
-                $amid = angle_reduce($amid);
-                $amidnorm = angle_reduce($amidnorm);
 
                 my $boundtanpt = line_line_intersection(
                       [ $boundary_edge->{nodes}->[0]->{point}, $boundary_edge->{nodes}->[1]->{point} ],
@@ -847,7 +846,7 @@ sub getFoot {
     my $m  = ($seg->[1]->[0] - $seg->[0]->[0] == 0) ? 'inf' : ($seg->[1]->[1] - $seg->[0]->[1])/($seg->[1]->[0] - $seg->[0]->[0]);
     my @sortx = $seg->[0]->[0] < $seg->[1]->[0] ? ($seg->[0]->[0], $seg->[1]->[0]) : ($seg->[1]->[0], $seg->[0]->[0]);
     my @sorty = $seg->[0]->[1] < $seg->[1]->[1] ? ($seg->[0]->[1], $seg->[1]->[1]) : ($seg->[1]->[1], $seg->[0]->[1]);
-    if ($m eq 0) {
+    if ($m == 0) {
         if ($x >= $sortx[0] && $x <= $sortx[1]) {$foot=[$x, $seg->[0]->[1]];}
         }
     elsif ($m =~ /inf/) {
@@ -995,12 +994,13 @@ sub line_line_intersection {
     }
 
 
-sub svgize {
-    my $triios=shift;
-    my $fn=shift;
+sub to_svg {
+    my $triios = shift;
+    my $fn = shift;
+    my $dispsize = shift;
+    my %spec = @_;
     my $triio = $triios->[0];
     my $vorio = @{$triios}?$triios->[1]:undef;
-    my %spec = @_;
     my @edges;
     my @segs;
     my @pts;
@@ -1008,46 +1008,129 @@ sub svgize {
     my @vedges;
     my @vrays;
     my @circles;
-    my $maxx = 0;
-    my $maxy = 0;
-    if (!$triio) {warn "no good for svg";return;}
+    my @elements;
+    my $maxx;
+    my $maxy;
+    my $minx;
+    my $miny;
+    if (!$triio) {carp "no geometry provided";return;}
+    foreach my $key ( keys %spec ) { if (ref($spec{$key}) !~ /ARRAY/) { carp("style config for '$key' should be a reference to an array"); return; } } 
 
+    # make copies of points, because we'll be moving and scaling them
+    
     if (ref($triio) =~ /HASH/ && defined $triio->{nodes}) {
-        push @pts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;              [$_,defined $spec{points}  ? @{$spec{points}} : undef]} map $_->{point}, @{$triio->{nodes}};
-        if ($spec{edges})    {push @edges, map {[$_,@{$spec{edges}}]}    map [$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}], @{$triio->{edges}};}
-        if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}], @{$triio->{segments}};}
+        push @pts, map [$_,defined $spec{nodes}  ? @{$spec{nodes}} : undef], map [@{$_->{point}}], @{$triio->{nodes}};
         }
     else {
-        push @pts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;              [$_,defined $spec{points}  ? @{$spec{points}} : undef]} ltolol(2,$triio->pointlist);
+        push @pts, map [[@{$_}],defined $spec{nodes}  ? @{$spec{nodes}} : undef], ltolol(2,$triio->pointlist);
+        }
+    if ($vorio) {
+        if (ref($vorio) =~ /HASH/ && defined $vorio->{nodes}) {
+            push @vpts, map [$_,defined $spec{vnodes} ?  @{$spec{vnodes}} : undef], map [@{$_->{point}}], @{$vorio->{nodes}};
+            }
+        else {
+            push @vpts, map [[@{$_}],defined $spec{vnodes} ?  @{$spec{vnodes}} : undef], ltolol(2,$vorio->pointlist);
+            }
+        }
+
+    $maxx = $pts[0]->[0]->[0];
+    $minx = $pts[0]->[0]->[0];
+    $maxy = $pts[0]->[0]->[1];
+    $miny = $pts[0]->[0]->[1];
+    foreach my $pt (@pts,@vpts) {
+        if ($maxx < $pt->[0]->[0]) {$maxx = $pt->[0]->[0]}
+        if ($maxy < $pt->[0]->[1]) {$maxy = $pt->[0]->[1]}
+        if ($minx > $pt->[0]->[0]) {$minx = $pt->[0]->[0]}
+        if ($miny > $pt->[0]->[1]) {$miny = $pt->[0]->[1]}
+        }
+
+    # offset and scale to avoid limitations of svg renderers
+
+
+    my $dispsizex = '640';
+    my $dispsizey = '480';
+    
+    if (ref($dispsize) =~ /ARRAY/ && @{$dispsize} > 1) {
+        $dispsizex = $dispsize->[0];
+        $dispsizey = $dispsize->[1];
+        }
+    
+    # used to scale lines and point circle radii
+    # so they stay visible in different viewports dimensions
+    # also, * 0.95 to leave some margin
+    my $scale=(sqrt($dispsizex**2+$dispsizey**2))/sqrt(($maxx-$minx)**2+($maxy-$miny)**2);
+    #$scale=1;
+
+    foreach (@pts,@vpts) {
+        $_->[0]->[0] -= $minx;
+        $_->[0]->[0] *= $scale;
+        $_->[0]->[0] = sprintf("%.0f",1000*$_->[0]->[0])/1000;
+        $_->[0]->[1] -= $miny;
+        $_->[0]->[1] *= $scale;
+        $_->[0]->[1] = sprintf("%.0f",1000*$_->[0]->[1])/1000;
+        }
+
+    my $scaled_maxx = ($maxx - $minx) * $scale;
+    my $scaled_maxy = ($maxy - $miny) * $scale;
+    my $scaled_minx = 0;
+    my $scaled_miny = 0;
+
+    if (ref($triio) =~ /HASH/ && defined $triio->{nodes}) {
+        if ($spec{edges})    {push @edges, map {[$_,@{$spec{edges}}]}    map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{edges}};}
+        if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{segments}};}
+        #ignoring any subparametric points for elements
+        if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0])], @{$triio->{elements}};}
+
+        }
+    else {
         if ($spec{edges})    {push @edges, map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{edges}}]}    ltolol(2,$triio->edgelist);}
         if ($spec{segments}) {push @segs,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{segments}}]} ltolol(2,$triio->segmentlist);}
+        #ignoring any subparametric points for elements
+        if ($spec{elements}) {
+            push @elements,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0],$pts[$_->[2]]->[0]],$spec{elements}->[0]]} ltolol($triio->numberofcorners,$triio->trianglelist);
+            #read triangle attribute list, so at least those are available for choosing fill color in this case
+            if (ref($spec{elements}->[0]) =~ /CODE/ && $triio->numberoftriangleattributes > 0 && $triio->numberofregions > 0) {
+                my @eleattrs = ltolol($triio->numberoftriangleattributes,$triio->triangleattributes);
+                for (my $i=0;$i<@elements;$i++) {
+                    # topologically-linked triangle not available here
+                    # but we'll fake it at least for the attributes list
+                    # so the color callback can still color according to region id
+                    # or whatever is in the triangle attribute list
+                    $elements[$i]->[1] = &{$spec{elements}->[0]}({attributes=>$eleattrs[$i]});
+                    }
+                }
+            }
         }
+
 
     if ($vorio) {
         if (ref($vorio) =~ /HASH/ && defined $vorio->{nodes}) {
-            push @vpts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;[$_,defined $spec{vpoints} ?  @{$spec{vpoints}} : undef]} map $_->{point}, @{$vorio->{nodes}};
             # circles only available in this case
             if (defined $spec{circles}) {
                 push @circles, map {
-                                   [$_->{point},
-                                    defined $_->{radius} 
-                                        ? $_->{radius} 
-                                        : dist2d($_->{point},$edges[$_->{edges}->[0]->{index}]->[0]->[0]),
+                                   [
+                                    [ # this is point and radius: [x,y,r]
+                                     @{$vpts[$_->{index}]->[0]},
+                                     defined $_->{radius} 
+                                         ? $_->{radius} * $scale
+                                         : dist2d($vpts[$_->{index}]->[0],$edges[$_->{edges}->[0]->{index}]->[0]->[0])
+                                    ],
                                     @{$spec{circles}}
                                    ]
                                    } @{$vorio->{nodes}};
                 }
-            @vedges = map [[$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
+            @vedges = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],$vpts[$_->{nodes}->[1]->{index}]->[0]],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
             if (defined $spec{vrays}) {
-                @vrays  = map [[$_->{nodes}->[0]->{point},[@{$_->{vector}}]],(defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
+                @vrays  = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],[@{$_->{vector}}]],(defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
                 foreach my $ray (@vrays) {
+                    $ray->[0]->[1]->[0] *= $scale;
+                    $ray->[0]->[1]->[1] *= $scale;
                     $ray->[0]->[1]->[0] += $ray->[0]->[0]->[0];
                     $ray->[0]->[1]->[1] += $ray->[0]->[0]->[1];
                     }
                 }
             }
         else {
-            push @vpts, map {if ($maxx<$_->[0]) {$maxx=$_->[0]} if ($maxy<$_->[1]) {$maxy=$_->[1]} ;[$_,defined $spec{vpoints} ?  @{$spec{vpoints}} : undef]} ltolol(2,$vorio->pointlist);
             if ($spec{vedges})    {
                 my @ves   =ltolol(2,$vorio->edgelist);
                 my @vnorms=ltolol(2,$vorio->normlist);
@@ -1067,60 +1150,87 @@ sub svgize {
                         }
                     }
                 }
+            if ($spec{circles}) {
+                for (my $i=0;$i<@vpts;$i++) {
+                    push @circles, [[@{$vpts[$i]->[0]},dist2d($vpts[$i]->[0],$elements[$i]->[0])],@{$spec{circles}}];
+                    }
+                }
             }
         }
 
-    my $dispsize=400;
-    my $scale=($dispsize*0.9)/$maxy;
-    #$scale=1;
+    my $margin_x_hi = 5;
+    my $margin_x_lo = 5;
+    my $margin_y_hi = 5;
+    my $margin_y_lo = 5;
+
+    if (defined $spec{circles}) {
+        my $cir_maxx = $circles[0]->[0]->[0] + $circles[0]->[0]->[2];
+        my $cir_maxy = $circles[0]->[0]->[1] + $circles[0]->[0]->[2];
+        my $cir_minx = $circles[0]->[0]->[0] - $circles[0]->[0]->[2];
+        my $cir_miny = $circles[0]->[0]->[1] - $circles[0]->[0]->[2];
+        foreach my $cir (@circles) {
+            if ($cir_maxx < $cir->[0]->[0] + $cir->[0]->[2]) {$cir_maxx = $cir->[0]->[0] + $cir->[0]->[2]}
+            if ($cir_maxy < $cir->[0]->[1] + $cir->[0]->[2]) {$cir_maxy = $cir->[0]->[1] + $cir->[0]->[2]}
+            if ($cir_minx > $cir->[0]->[0] - $cir->[0]->[2]) {$cir_minx = $cir->[0]->[0] - $cir->[0]->[2]}
+            if ($cir_miny > $cir->[0]->[1] - $cir->[0]->[2]) {$cir_miny = $cir->[0]->[1] - $cir->[0]->[2]}
+            }
+        if ($cir_maxx-$scaled_maxx > $margin_x_hi) {$margin_x_hi = ($cir_maxx - $scaled_maxx) + 5;}
+        if ($scaled_minx-$cir_minx > $margin_x_lo) {$margin_x_lo = ($scaled_minx - $cir_minx) + 5;}
+        if ($cir_maxy-$scaled_maxy > $margin_y_hi) {$margin_y_hi = ($cir_maxy - $scaled_maxy) + 5;}
+        if ($scaled_miny-$cir_miny > $margin_y_lo) {$margin_y_lo = ($scaled_miny - $cir_miny) + 5;}
+        }
+
 
     open(SVGO,'>',$fn);
-    print SVGO sprintf <<"EOS", $dispsize, $dispsize, $maxx, $maxy, $maxy;
+    print SVGO sprintf <<"EOS", $dispsizex, $dispsizey, -$margin_x_lo, -$margin_y_hi, $scaled_maxx + ($margin_x_lo + $margin_x_hi), $scaled_maxy + ($margin_y_lo + $margin_y_hi), $scaled_maxy;
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
-<svg width="%s" height="%s" viewBox="0 0 %s %s" preservAspectRatio="minXminY meet" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
+<svg width="%s" height="%s" viewBox="%s %s %s %s" preservAspectRatio="minXminY meet" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
 <g transform="scale(1,-1) translate(0,-%s)">
 EOS
 
-    if ($spec{edges}) {print SVGO "\nedges\n";}
+    if ($spec{elements}) {print SVGO "\n<!-- elements -->\n";}
+    foreach my $ele (@elements) {
+        print SVGO '<path d="M',join('L',map $_->[0].','.$_->[1], @{$ele->[0]}),'" style="fill:',(defined($ele->[1]) ? $ele->[1] : 'none'),';',(defined($ele->[2])?$ele->[2]:''),'"/>',"\n"
+        }
+    if ($spec{edges}) {print SVGO "\n<!-- edges -->\n";}
     foreach my $edge (@edges) {
-        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',$edge->[2],';',(defined($edge->[3])?$edge->[3]:''),'"/>',"\n"
         }
-    if ($spec{segments}) {print SVGO "\nsegments\n";}
+    if ($spec{segments}) {print SVGO "\n<!-- segments -->\n";}
     foreach my $edge (@segs) {
-        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',$edge->[2],';',(defined($edge->[3])?$edge->[3]:''),'"/>',"\n"
         }
-    if ($spec{vedges} && $vorio) {print SVGO "\nvor edges\n";}
+    if ($spec{vedges} && $vorio) {print SVGO "\n<!-- vor edges -->\n";}
     foreach my $edge (@vedges) {
-        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',$edge->[2],';',(defined($edge->[3])?$edge->[3]:''),'"/>',"\n"
         }
-    if ($spec{vrays} && $vorio) {print SVGO "\nvor rays\n";}
+    if ($spec{vrays} && $vorio) {print SVGO "\n<!-- vor rays -->\n";}
     foreach my $edge (@vrays) {
-        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" ';
-        print SVGO 'style="stroke:',$edge->[1],';stroke-width:',($edge->[2]/$scale),';"/>',"\n"
+        print SVGO '<line x1="',$edge->[0]->[0]->[0],'" y1="',$edge->[0]->[0]->[1],'" x2="',$edge->[0]->[1]->[0],'" y2="',$edge->[0]->[1]->[1],'" style="stroke:',$edge->[1],';stroke-width:',$edge->[2],';',(defined($edge->[3])?$edge->[3]:''),'"/>',"\n"
         }
-    if ($spec{points}) {
-        print SVGO "\npts\n";
+    if ($spec{nodes}) {
+        print SVGO "\n<!-- pts -->\n";
         foreach my $pt (@pts) {
-            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', ($pt->[2]/$scale) ,'" style="fill:',$pt->[1],';"/>',"\n"
+            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', $pt->[2] ,'" style="fill:',$pt->[1],';',(defined($pt->[3])?$pt->[3]:''),'"/>',"\n"
             }
         }
-    if ($spec{vpoints} && $vorio) {
-        print SVGO "\nvor pts\n";
+    if ($spec{vnodes} && $vorio) {
+        print SVGO "\n<!-- vor pts -->\n";
         foreach my $pt (@vpts) {
-            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', ($pt->[2]/$scale) ,'" style="fill:',$pt->[1],';"/>',"\n"
+            print SVGO '<circle cx="',$pt->[0]->[0],'" cy="',$pt->[0]->[1],'" r="', $pt->[2] ,'" style="fill:',$pt->[1],';',(defined($pt->[3])?$pt->[3]:''),'"/>',"\n"
             }
         }
-    if ($spec{circles}) {print SVGO "\ncircles\n";}
+    if ($spec{circles}) {print SVGO "\n<!-- circles -->\n";}
     foreach my $circle (@circles) {
-         print SVGO '<circle cx="',$circle->[0]->[0],'" cy="',$circle->[0]->[1],'" r="', ($circle->[1]) ,'" style="stroke-width:',($circle->[3]/$scale),';stroke:',$circle->[2],';fill:none;"/>',"\n"
+         print SVGO '<circle cx="',$circle->[0]->[0],'" cy="',$circle->[0]->[1],'" r="', $circle->[0]->[2] ,'" style="stroke-width:',$circle->[2],';stroke:',$circle->[1],';fill:none;',(defined($circle->[3])?$circle->[3]:''),'"/>',"\n"
         }
 
     if ($spec{raw}) {
-        print SVGO "\nraw svg\n";
+        print SVGO "\n<!-- raw svg -->\n";
         print SVGO join("\n",@{$spec{raw}});
         }
-    print SVGO '</g></svg>';
+    print SVGO "\n</g></svg>";
     close(SVGO);
     }
 
@@ -1859,6 +1969,79 @@ a direction vector for the ray.
 
 =head1 UTILITY FUNCTIONS
 
+=head2 to_svg
+
+This function is meant as a development and debugging aid, to "dump" the
+geometric data structures specific to this package to a graphical
+representation. Takes an array ref, containing one or two topology hashes,
+as returned by C<triangulate>, a filename string, and then key-value pairs
+with keys corresponding to output lists, and values consisting of references to
+arrays containing style configuration. If two topology hashes are contained in
+the first array ref argument, the second is assumed to represent a Voronoi
+diagram.
+
+Only geometry that has a style configuration will be displayed. The following
+example includes everything. To display a subset, just omit any of the style
+configuration key-value pairs.
+
+    ($topo, $vtopo) = $tri->triangulate('ve');
+
+    to_svg( [$topo, $vtopo],
+            
+            "enchilada.svg",
+            
+            #                     line width or   optional
+            #         svg color   point radius    extra CSS
+            
+            nodes,   ['black'  ,   0.3],
+            edges,   ['#CCCCCC',   0.7],
+            segments,['blue'   ,   0.9,     'stroke-dasharray="1,1"'],
+            elements,['pink']  , # string or function reference
+
+            # these require Voronoi input
+
+            vnodes,  ['purple' ,   0.3],
+            vedges,  ['#FF0000',   0.7],
+            vrays,   ['purple' ,   0.6],
+            circles, ['orange' ,   0.6],
+            
+          );
+
+Note that for display purposes C<vedges> does not include the infinite rays in 
+the Voronoi diagram. To see the complete Voronoi diagram, including segments
+representing the infinite rays, you should include style configuration for the 
+C<vrays> key, as in the example above.
+
+Elements (triangles) only need one style config entry, for color. In this case
+the entry can also be a reference to a callback function. A reference to the
+triangle being processed for display will be passed to the callback function.
+Therefore the callback function can determine a color based on any features
+or relationships of that triangle.
+
+Typically you might color each triangle according to the region it's in, by
+using Triangle's 'A' switch, and then reading the region attribute from the
+last item in the triangle's attribute list.
+
+    my $region_colors_callback = sub {
+        my $tri_ref = shift;
+        return ('gray','blue','green')[$tri_ref->{attributes}->[-1]];
+        };
+
+But any other data accessible through the triangle reference can be used to 
+calculate a color. For instance, the triangle's three nodes can carry any
+number of attributes, which are interpolated during mesh generation. You 
+might shade each triangle according to the average of a node attribute.
+
+    my $tri_nodes_average_callback = sub {
+        my $tri_ref = shift;
+        my $sum = 0;
+        # calculate average of the eighth attribute in all nodes
+        foreach my $node (@{$tri_ref->{nodes}}) {
+            $sum += $node->{attributes}->[7];
+            }
+        return &attrib_val_to_grayscale_hexcode( $sum / 3 );
+        };
+
 =head2 mic_adjust
 
 Warning: not yet thoroughly tested; may move elsewhere
@@ -1870,29 +2053,219 @@ intervals between sample points on the polygon become shorter. But it's not
 always desirable to multiply the number of polygon points to achieve short
 intervals.
 
-At any point on the true medial axis, there is a maximally inscribed circle,
+=for html <div style="width:30%;float:right;display:inline-block;text-align:center;">
+<svg width="57%" viewBox="-23 -11 204 165" preservAspectRatio="minXminY meet" style="margin-top:15px;" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
+<style type="text/css">
+.edge {stroke:gray;stroke-width:2;}
+.seg  {stroke:black;stroke-width:1;}
+.vedge {stroke:blue;stroke-width:2;}
+.vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;}
+</style>
+<g transform="scale(1,-1) translate(0,-117.66968108291)">
+<!-- edges -->
+<line x1="0" y1="0" x2="58.835" y2="58.835" class="edge"/>
+<line x1="58.835" y1="58.835" x2="0" y2="58.835" class="edge"/>
+<line x1="0" y1="58.835" x2="0" y2="0" class="edge"/>
+<line x1="0" y1="0" x2="88.252" y2="0" class="edge"/>
+<line x1="88.252" y1="0" x2="58.835" y2="58.835" class="edge"/>
+<line x1="58.835" y1="58.835" x2="58.835" y2="88.252" class="edge"/>
+<line x1="58.835" y1="88.252" x2="0" y2="58.835" class="edge"/>
+<line x1="0" y1="58.835" x2="29.417" y2="117.67" class="edge"/>
+<line x1="29.417" y1="117.67" x2="0" y2="117.67" class="edge"/>
+<line x1="0" y1="117.67" x2="0" y2="58.835" class="edge"/>
+<line x1="58.835" y1="88.252" x2="29.417" y2="117.67" class="edge"/>
+<line x1="58.835" y1="88.252" x2="58.835" y2="117.67" class="edge"/>
+<line x1="58.835" y1="117.67" x2="29.417" y2="117.67" class="edge"/>
+<line x1="88.252" y1="0" x2="176.505" y2="0" class="edge"/>
+<line x1="176.505" y1="0" x2="176.505" y2="29.417" class="edge"/>
+<line x1="176.505" y1="29.417" x2="88.252" y2="0" class="edge"/>
+<line x1="176.505" y1="29.417" x2="117.67" y2="58.835" class="edge"/>
+<line x1="117.67" y1="58.835" x2="88.252" y2="0" class="edge"/>
+<line x1="176.505" y1="58.835" x2="117.67" y2="58.835" class="edge"/>
+<line x1="176.505" y1="29.417" x2="176.505" y2="58.835" class="edge"/>
+<line x1="117.67" y1="58.835" x2="58.835" y2="58.835" class="edge"/>
+<!-- segments -->
+<line x1="0" y1="0" x2="0" y2="58.835" class="seg"/>
+<line x1="88.252" y1="0" x2="0" y2="0" class="seg"/>
+<line x1="176.505" y1="0" x2="88.252" y2="0" class="seg"/>
+<line x1="176.505" y1="29.417" x2="176.505" y2="0" class="seg"/>
+<line x1="176.505" y1="58.835" x2="176.505" y2="29.417" class="seg"/>
+<line x1="117.67" y1="58.835" x2="176.505" y2="58.835" class="seg"/>
+<line x1="58.835" y1="58.835" x2="117.67" y2="58.835" class="seg"/>
+<line x1="58.835" y1="58.835" x2="58.835" y2="88.252" class="seg"/>
+<line x1="58.835" y1="88.252" x2="58.835" y2="117.67" class="seg"/>
+<line x1="29.417" y1="117.67" x2="58.835" y2="117.67" class="seg"/>
+<line x1="0" y1="117.67" x2="29.417" y2="117.67" class="seg"/>
+<line x1="0" y1="58.835" x2="0" y2="117.67" class="seg"/>
+<!-- vor edges -->
+<line x1="29.417" y1="29.417" x2="44.126" y2="14.709" class="vedge"/>
+<line x1="29.417" y1="29.417" x2="29.417" y2="73.544" class="vedge"/>
+<line x1="44.126" y1="14.709" x2="88.252" y2="36.772" class="vedge"/>
+<line x1="29.417" y1="73.544" x2="24.515" y2="83.349" class="vedge"/>
+<line x1="14.709" y1="88.252" x2="24.515" y2="83.349" class="vedge"/>
+<line x1="24.515" y1="83.349" x2="44.126" y2="102.961" class="vedge"/>
+<line x1="132.378" y1="14.709" x2="132.378" y2="14.709" class="vedge"/>
+<line x1="132.378" y1="14.709" x2="147.087" y2="44.126" class="vedge"/>
+<line x1="132.378" y1="14.709" x2="88.252" y2="36.772" class="vedge"/>
+<!-- pts -->
+<circle cx="0" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="0" cy="0" r="3" style="fill:black;"/>
+<circle cx="88.252" cy="0" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="0" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="29.417" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="117.67" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="88.252" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="117.67" r="3" style="fill:black;"/>
+<circle cx="29.417" cy="117.67" r="3" style="fill:black;"/>
+<circle cx="0" cy="117.67" r="3" style="fill:black;"/>
+<!-- vor pts -->
+<circle cx="29.417" cy="29.417" r="3" style="fill:blue;"/>
+<circle cx="44.126" cy="14.709" r="3" style="fill:blue;"/>
+<circle cx="29.417" cy="73.544" r="3" style="fill:blue;"/>
+<circle cx="14.709" cy="88.252" r="3" style="fill:blue;"/>
+<circle cx="24.515" cy="83.349" r="3" style="fill:blue;"/>
+<circle cx="44.126" cy="102.961" r="3" style="fill:blue;"/>
+<circle cx="132.378" cy="14.709" r="3" style="fill:blue;"/>
+<circle cx="132.378" cy="14.709" r="3" style="fill:blue;"/>
+<circle cx="147.087" cy="44.126" r="3" style="fill:blue;"/>
+<circle cx="88.252" cy="36.772" r="3" style="fill:blue;"/>
+<!-- circles -->
+<circle cx="29.417" cy="29.417" r="41.601" class="vcirc"/>
+<circle cx="44.126" cy="14.709" r="46.512" class="vcirc"/>
+<circle cx="29.417" cy="73.544" r="32.890" class="vcirc"/>
+<circle cx="14.709" cy="88.252" r="32.889" class="vcirc"/>
+<circle cx="24.515" cy="83.349" r="34.668" class="vcirc"/>
+<circle cx="44.126" cy="102.961" r="20.801" class="vcirc"/>
+<circle cx="132.378" cy="14.709" r="46.512" class="vcirc"/>
+<circle cx="132.378" cy="14.709" r="46.513" class="vcirc"/>
+<circle cx="147.087" cy="44.126" r="32.890" class="vcirc"/>
+<circle cx="88.252" cy="36.772" r="36.772" class="vcirc"/>
+</g></svg>
+<br/><small>Voronoi edges (blue)<br/> as a poor medial<br/>axis approximation</small><br/>
+<svg width="50%" viewBox="-5 -5 186 127" preservAspectRatio="minXminY meet" style="margin-top:23px;" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
+<style type="text/css">
+.edge {stroke:gray;stroke-width:2;}
+.seg  {stroke:black;stroke-width:1;}
+.vedge {stroke:blue;stroke-width:2;}
+.vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;}
+</style>
+<g transform="scale(1,-1) translate(0,-117.66968108291)">
+<!-- edges -->
+<line x1="0" y1="0" x2="58.835" y2="58.835" class="edge"/>
+<line x1="58.835" y1="58.835" x2="0" y2="58.835" class="edge"/>
+<line x1="0" y1="58.835" x2="0" y2="0" class="edge"/>
+<line x1="0" y1="0" x2="88.252" y2="0" class="edge"/>
+<line x1="88.252" y1="0" x2="58.835" y2="58.835" class="edge"/>
+<line x1="58.835" y1="58.835" x2="58.835" y2="88.252" class="edge"/>
+<line x1="58.835" y1="88.252" x2="0" y2="58.835" class="edge"/>
+<line x1="0" y1="58.835" x2="29.417" y2="117.67" class="edge"/>
+<line x1="29.417" y1="117.67" x2="0" y2="117.67" class="edge"/>
+<line x1="0" y1="117.67" x2="0" y2="58.835" class="edge"/>
+<line x1="58.835" y1="88.252" x2="29.417" y2="117.67" class="edge"/>
+<line x1="58.835" y1="88.252" x2="58.835" y2="117.67" class="edge"/>
+<line x1="58.835" y1="117.67" x2="29.417" y2="117.67" class="edge"/>
+<line x1="88.252" y1="0" x2="176.505" y2="0" class="edge"/>
+<line x1="176.505" y1="0" x2="176.505" y2="29.417" class="edge"/>
+<line x1="176.505" y1="29.417" x2="88.252" y2="0" class="edge"/>
+<line x1="176.505" y1="29.417" x2="117.67" y2="58.835" class="edge"/>
+<line x1="117.67" y1="58.835" x2="88.252" y2="0" class="edge"/>
+<line x1="176.505" y1="58.835" x2="117.67" y2="58.835" class="edge"/>
+<line x1="176.505" y1="29.417" x2="176.505" y2="58.835" class="edge"/>
+<line x1="117.67" y1="58.835" x2="58.835" y2="58.835" class="edge"/>
+<!-- segments -->
+<line x1="0" y1="0" x2="0" y2="58.835" class="seg"/>
+<line x1="88.252" y1="0" x2="0" y2="0" class="seg"/>
+<line x1="176.505" y1="0" x2="88.252" y2="0" class="seg"/>
+<line x1="176.505" y1="29.417" x2="176.505" y2="0" class="seg"/>
+<line x1="176.505" y1="58.835" x2="176.505" y2="29.417" class="seg"/>
+<line x1="117.67" y1="58.835" x2="176.505" y2="58.835" class="seg"/>
+<line x1="58.835" y1="58.835" x2="117.67" y2="58.835" class="seg"/>
+<line x1="58.835" y1="58.835" x2="58.835" y2="88.252" class="seg"/>
+<line x1="58.835" y1="88.252" x2="58.835" y2="117.67" class="seg"/>
+<line x1="29.417" y1="117.67" x2="58.835" y2="117.67" class="seg"/>
+<line x1="0" y1="117.67" x2="29.417" y2="117.67" class="seg"/>
+<line x1="0" y1="58.835" x2="0" y2="117.67" class="seg"/>
+<!-- vor edges -->
+<line x1="34.465" y1="34.465" x2="49.287" y2="30.192" class="vedge"/>
+<line x1="34.465" y1="34.465" x2="29.417" y2="73.544" class="vedge"/>
+<line x1="49.287" y1="30.192" x2="88.252" y2="29.417" class="vedge"/>
+<line x1="29.417" y1="73.544" x2="29.417" y2="83.349" class="vedge"/>
+<line x1="14.709" y1="102.961" x2="29.417" y2="83.349" class="vedge"/>
+<line x1="29.417" y1="83.349" x2="44.126" y2="102.961" class="vedge"/>
+<line x1="161.796" y1="14.709" x2="132.378" y2="29.417" class="vedge"/>
+<line x1="132.378" y1="29.417" x2="161.796" y2="44.126" class="vedge"/>
+<line x1="132.378" y1="29.417" x2="88.252" y2="29.417" class="vedge"/>
+<!-- pts -->
+<circle cx="0" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="0" cy="0" r="3" style="fill:black;"/>
+<circle cx="88.252" cy="0" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="0" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="29.417" r="3" style="fill:black;"/>
+<circle cx="176.505" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="117.67" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="58.835" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="88.252" r="3" style="fill:black;"/>
+<circle cx="58.835" cy="117.67" r="3" style="fill:black;"/>
+<circle cx="29.417" cy="117.67" r="3" style="fill:black;"/>
+<circle cx="0" cy="117.67" r="3" style="fill:black;"/>
+<!-- vor pts -->
+<circle cx="34.465" cy="34.465" r="3" style="fill:blue;"/>
+<circle cx="49.287" cy="30.192" r="3" style="fill:blue;"/>
+<circle cx="29.417" cy="73.544" r="3" style="fill:blue;"/>
+<circle cx="14.709" cy="102.961" r="3" style="fill:blue;"/>
+<circle cx="29.417" cy="83.349" r="3" style="fill:blue;"/>
+<circle cx="44.126" cy="102.961" r="3" style="fill:blue;"/>
+<circle cx="161.796" cy="14.709" r="3" style="fill:blue;"/>
+<circle cx="132.378" cy="29.417" r="3" style="fill:blue;"/>
+<circle cx="161.796" cy="44.126" r="3" style="fill:blue;"/>
+<circle cx="88.252" cy="29.417" r="3" style="fill:blue;"/>
+<!-- circles -->
+<circle cx="34.465" cy="34.465" r="34.464" class="vcirc"/>
+<circle cx="49.287" cy="30.192" r="30.192" class="vcirc"/>
+<circle cx="29.417" cy="73.544" r="29.417" class="vcirc"/>
+<circle cx="14.709" cy="102.961" r="14.708" class="vcirc"/>
+<circle cx="29.417" cy="83.349" r="29.417" class="vcirc"/>
+<circle cx="44.126" cy="102.961" r="14.708" class="vcirc"/>
+<circle cx="161.796" cy="14.709" r="14.708" class="vcirc"/>
+<circle cx="132.378" cy="29.417" r="29.417" class="vcirc"/>
+<circle cx="161.796" cy="44.126" r="14.708" class="vcirc"/>
+<circle cx="88.252" cy="29.417" r="29.417" class="vcirc"/>
+</g></svg>
+<br/><small>improved approximation<br/>after calling mic_adust()</small><br/>
+</div>
+
+At any point on the true medial axis, there is a maximal inscribed circle,
 with it's center on the medial axis, and tangent to the polygon in at least
-two places. The C<mic_adjust()> function uses the triangulation and Voronoi
-diagram topologies to move each Voronoi node to a location where it is tangent
-to the polygon at two points. It then stores the radius from node to tangent
-in the node. After calling c<mic_adjust()>, the modified Voronoi topology can 
-be used as a list of maximal inscribed circles, which can be used to derive a
-straighter, better medial axis approximation, without having to increase the
-number of sample points on the polygon.
+two places.
+
+The C<mic_adjust()> function moves each Voronoi node so that it becomes the 
+center of a circle that touches the polygon at two points. In simple cases this
+is a maximal inscribed circle, and the point is on the medial axis. And when 
+it's not, it still should be a much better approximation than the original 
+point location. The radius to the tangent on the polygon is stored with the 
+updated Voronoi node.
+
+After calling c<mic_adjust()>, the modified Voronoi topology can be used as a
+list of maximal inscribed circles, from which can be derive a straighter, 
+better medial axis approximation, without having to increase the number of 
+sample points on the polygon.
 
     ($topo, $voronoi_topo) = $tri->triangulate('e');
 
     mic_adjust($topo, $voronoi_topo); # modifies $voronoi_topo in place
     
-    $maximal_inscribed_circle = $voronoi_topo->{nodes}->[0];
-    
-    $center = $maximal_inscribed_circle->{point};
-    $radius = $maximal_inscribed_circle->{radius};
+    foreach my $node (@{$voronoi_topo->{nodes}}) {
+        $mic_center = $node->{point};
+        $mic_radius = $node->{radius};
+        ...
+        }
 
-Deriving a medial axis approximation by walking and pruning the topology is
-left to you. Constructing a true medial axis is much more involved - a 
-subject for a different module. Until that module appears, C<mic_adjust()> 
-might help fill the gap.
+Constructing a true medial axis is much more involved - a subject for a 
+different module. Until that module appears, running topology through
+C<mic_adjust()> and then walking and pruning the Voronoi topology might help 
+fill the gap.
 
 =head1 API STATUS
 
