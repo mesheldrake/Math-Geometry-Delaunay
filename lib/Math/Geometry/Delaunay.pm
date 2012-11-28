@@ -707,7 +707,6 @@ sub mic_adjust {
                                     dist2d($a->{nodes}->[0]->{point},$a->{nodes}->[1]->{point})} 
                                     @boundary_edges;        
 
-            my $opposite_node;
             my @opposite_boundary_edges;
             my @opposite_boundary_feet;
 
@@ -762,7 +761,7 @@ sub mic_adjust {
                 ) {
                 $boundary_edge=$boundary_edges[0];
                 my @other_edges = grep $_ != $boundary_edge, map $topo->{edges}->[$_->{index}], @{$vnode->{edges}};
-                $opposite_node = +(grep {$_ != $boundary_edge->{nodes}->[0] && $_ != $boundary_edge->{nodes}->[1]} @{$other_edges[1]->{nodes}})[0];
+                my $opposite_node = +(grep {$_ != $boundary_edge->{nodes}->[0] && $_ != $boundary_edge->{nodes}->[1]} @{$other_edges[1]->{nodes}})[0];
                 @opposite_boundary_edges = grep {$_->{marker}} @{$opposite_node->{edges}};
                 @opposite_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @opposite_boundary_edges;
 
@@ -802,8 +801,8 @@ sub mic_adjust {
                                 $opp_edge->{nodes}->[0]->{point}->[0] - $opp_edge->{nodes}->[1]->{point}->[0]);
                     }
                 else { # the "fake foot" case, where opposite edge is just a point
-                    $a1 = atan2($opposite_node->{point}->[1] - $vnode->{point}->[1],
-                                $opposite_node->{point}->[0] - $vnode->{point}->[0]);
+                    $a1 = atan2($foot->[1] - $vnode->{point}->[1],
+                                $foot->[0] - $vnode->{point}->[0]);
                     $a1 -= $pi / 2;
                     }
 
@@ -1226,7 +1225,10 @@ EOS
 
     if ($spec{raw}) {
         print SVGO "\n<!-- raw svg -->\n";
-        print SVGO join("\n",@{$spec{raw}});
+        print SVGO join("\n",map { s/ (c?x[12]?)="([0-9\.eE\-]+)"/' '.$1.'="'.(($2-$minx)*$scale).'"'/ge; 
+                                   s/ (c?y[12]?)="([0-9\.eE\-]+)"/' '.$1.'="'.(($2-$miny)*$scale).'"'/ge;
+                                   $_;
+                                 } @{$spec{raw}});
         }
     print SVGO "\n</g></svg>";
     close(SVGO);
