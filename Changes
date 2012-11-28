@@ -1,6 +1,12 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
-0.04 Sunday nov 25 16:04:00 2012
+0.05 Wednesday Nov 28 02:00:00 2012
+
+  - added to_svg()
+  - added mic_adjust(), for medial axis approximations
+  - enabled Delaunay triangle - Voronoi vertex cross referencing
+
+0.04 Sunday Nov 25 16:04:00 2012
 
   - bugfix: last edge in voronoi topology had references to all rays
   - documented edge list cross referencing
