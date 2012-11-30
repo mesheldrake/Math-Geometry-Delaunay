@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.07 Friday Nov 30 02:50:00 2012
+
+  - mic_adjust() improvements
+
 0.06 Wednesday Nov 28 15:47:00 2012
 
   - mic_adjust() bug fix
