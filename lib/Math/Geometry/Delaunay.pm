@@ -439,7 +439,7 @@ sub topology {
     my $ecnt = 0; # Corresponding edges in the Delaunay and Voronoi topologies will have the same index.
     my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} grep {$_>-1} @{$_}],marker => undef, elements => [], vector => undef, index => $ecnt++};foreach (@{$edg->{nodes}}) {push @{$_->{edges}   },$edg};$isVoronoi = 1 if ($_->[0] == -1 || $_->[1] == -1);$edg} ltolol(2,$triio->edgelist);
     my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]}              @{$_}],marker => undef, elements => []                                   };foreach (@{$edg->{nodes}}) {push @{$_->{segments}},$edg};                                                   $edg} ltolol(2,$triio->segmentlist);
- 
+
     my @elementattributes;
     if ($triio->numberoftriangleattributes) {
         @elementattributes = ltolol($triio->numberoftriangleattributes,$triio->triangleattributelist);
@@ -675,7 +675,7 @@ sub seg_poly_intersections {
     }
 
 # Adjust location of nodes in voronoi diagram so they become 
-# centers of maximally inscribed circles, and store MIC radius in each node.
+# centers of maximum inscribed circles, and store MIC radius in each node.
 # This is a first step towards a better medial axis approximation.
 # It straightens out the initial MA approx. derived from the Voronoi diagram.
 
@@ -701,7 +701,6 @@ sub mic_adjust {
         if (@{$vnode->{edges}} == 3) {
             my @all_edges = map {$topo->{edges}->[$_->{index}]} @{$vnode->{edges}};
             my @boundary_edges = grep {$_->{marker}} @all_edges;
-
             @boundary_edges = sort {dist2d($b->{nodes}->[0]->{point},$b->{nodes}->[1]->{point}) 
                                     <=> 
                                     dist2d($a->{nodes}->[0]->{point},$a->{nodes}->[1]->{point})} 
@@ -735,7 +734,7 @@ sub mic_adjust {
                                     || $corner_boundary_edges[$i]->{nodes}->[0] == $corner_boundary_edges[$i+1]->{nodes}->[1] )
                                    ? $corner_boundary_edges[$i]->{nodes}->[0]->{point}
                                    : $corner_boundary_edges[$i]->{nodes}->[1]->{point};
-                        # edge left undefined to signal this case
+                        # edge left undefined, or "false" to signal this case
                         push @boundary_feet_edges, [$foot,undef];
                         }
                     else {
@@ -746,11 +745,24 @@ sub mic_adjust {
 
                 @boundary_feet_edges = sort {dist2d($a->[0],$vnode->{point}) <=> dist2d($b->[0],$vnode->{point})} @boundary_feet_edges;
 
+                # closest edge
                 my $first_with_edge = +(grep {$_->[1]} @boundary_feet_edges)[0];
+
                 $boundary_edge = {nodes=>[$first_with_edge->[1]->{nodes}->[0],$first_with_edge->[1]->{nodes}->[1]]};
 
-                #my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
-                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[-1];
+                # Take the next closest edge
+                # Probably leaves the furthest edge not touched by mic, even in 
+                # cases where that should be fixable. The fix might be to slide
+                # the two closest feet toward the third, but you have to check 
+                # a bunch of stuff to know if that's reasonable. Might be worth
+                # it though for getting good results on low edge-res polygons.
+                # On the other hand, smart subdivision of the polygon can probably
+                # fix this issue in most cases - like make sure to have 
+                # points bracketing corners closely and evenly. That should tend
+                # to pull branch nodes at narrow square ends close to their 
+                # proper place. (Branch nodes typically correspond to triangles 
+                # that have no edges on the boundary.)
+                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
                 
                 $opposite_boundary_feet[0]  = $first_not_first_with_edge->[0];
                 $opposite_boundary_edges[0] = $first_not_first_with_edge->[1];
@@ -759,23 +771,58 @@ sub mic_adjust {
             if (@boundary_edges == 1
                 || @boundary_edges == 2
                 ) {
+
                 $boundary_edge=$boundary_edges[0];
+
+                my $bef = getFoot([$boundary_edge->{nodes}->[0]->{point},$boundary_edge->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
+                my $ber = sqrt(($vnode->{point}->[0]-$bef->[0])**2 + ($vnode->{point}->[1]-$bef->[1])**2);
+
+                if (@boundary_edges == 2) {
+                    # if other boundary edge closer make that the boundary edge
+                    my $obef = getFoot([$boundary_edges[1]->{nodes}->[0]->{point},$boundary_edges[1]->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
+                    next if (!$obef);
+                    my $ober = sqrt(($vnode->{point}->[0]-$obef->[0])**2 + ($vnode->{point}->[1]-$obef->[1])**2);
+                    if ($ober < $ber) {
+                        $boundary_edge = $boundary_edges[1];
+                        $bef=$obef;
+                        $ber=$ober;
+                        }
+                    }
+
                 my @other_edges = grep $_ != $boundary_edge, map $topo->{edges}->[$_->{index}], @{$vnode->{edges}};
                 my $opposite_node = +(grep {$_ != $boundary_edge->{nodes}->[0] && $_ != $boundary_edge->{nodes}->[1]} @{$other_edges[1]->{nodes}})[0];
                 @opposite_boundary_edges = grep {$_->{marker}} @{$opposite_node->{edges}};
                 @opposite_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @opposite_boundary_edges;
 
-                if (@boundary_edges == 1) { # should apply to ==2 too, but should screen out the "opposite" that is also "adjacent" in that case
-                    my @adjacent_boundary_edges = grep $_->{marker} && $_ != $boundary_edge, map @{$_->{edges}}, @{$boundary_edge->{nodes}};
+                if (@boundary_edges == 1
+                    # || @boundary_edges == 2
+                    ) { # should apply to ==2 too, but should screen out the "opposite" that is also "adjacent" in that case
+                    my @adjacent_boundary_edges = grep {$_->{marker} && $_ != $boundary_edge} map @{$_->{edges}}, @{$boundary_edge->{nodes}};
                     my @adjacent_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @adjacent_boundary_edges;
                     # if any adjacent bounds closer, replace $boundary_edge with closest
-                    my $bef = getFoot([$boundary_edge->{nodes}->[0]->{point},$boundary_edge->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
-                    my $ber = sqrt(($vnode->{point}->[0]-$bef->[0])**2 + ($vnode->{point}->[1]-$bef->[1])**2);
                     for (my $i = 0; $i < @adjacent_boundary_feet; $i++) {
-                        next if !$adjacent_boundary_feet[$i];
-                        if (sqrt(($adjacent_boundary_feet[$i]->[0]-$vnode->{point}->[0])**2 + ($adjacent_boundary_feet[$i]->[1]-$vnode->{point}->[1])**2) < $ber) {
+                        next if (!$adjacent_boundary_feet[$i]);
+                        my $newfootdist = sqrt(($vnode->{point}->[0] - $adjacent_boundary_feet[$i]->[0])**2 + ($vnode->{point}->[1]-$adjacent_boundary_feet[$i]->[1])**2);
+                        if ($newfootdist < $ber) {
                             $boundary_edge = $adjacent_boundary_edges[$i];
+                            $bef = $adjacent_boundary_feet[$i];
+                            $ber = $newfootdist;
                             }
+                        }
+                    }
+
+                if (grep $_, @opposite_boundary_feet) {
+                    my @sortind = sort {dist2d($vnode->{point},$opposite_boundary_feet[$a]) <=> dist2d($vnode->{point},$opposite_boundary_feet[$b])} grep {$opposite_boundary_feet[$_]} (0..$#opposite_boundary_feet);
+                    @opposite_boundary_feet = map $opposite_boundary_feet[$_], @sortind;
+                    @opposite_boundary_edges = map $opposite_boundary_edges[$_], @sortind;
+                    @opposite_boundary_feet = ($opposite_boundary_feet[0]);
+                    @opposite_boundary_edges = ($opposite_boundary_edges[0]);
+                    my $obr = dist2d($opposite_boundary_feet[0],$vnode->{point});
+                    if ($ber>$obr) {
+                        my $tmp = $opposite_boundary_edges[0];
+                        $opposite_boundary_edges[0] = $boundary_edge;
+                        $boundary_edge = $tmp;
+                        $opposite_boundary_feet[0] = $bef;
                         }
                     }
 
@@ -826,6 +873,7 @@ sub mic_adjust {
                     if ($center) {
                         $new_vnode_points[-1] = $center;
                         $new_vnode_radii[-1] = dist2d($center,$foot);
+                        # ahhh. Much better.
                         }
                     }
                 }
@@ -927,7 +975,7 @@ sub seg_seg_intersection {
                 }
             }
         }
-    elsif ($m2 ne 'Inf') {#so $m1 is Inf
+    elsif ($m2 ne 'Inf') { #so $m1 is Inf
 
         if ($x1 < $lowhiu[0] || $x1 > $lowhiu[1] && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
             return;
@@ -946,8 +994,6 @@ sub seg_seg_intersection {
         }
     return $int;
     }
-
-
 
 sub line_line_intersection {
     my $seg1 = shift;
@@ -982,7 +1028,7 @@ sub line_line_intersection {
             $int = [$xi,$y];
             }
         }
-    elsif ($m2 ne 'Inf') {# so $m1 is Inf
+    elsif ($m2 ne 'Inf') { # so $m1 is Inf
         my $yi = ($m2*$xi)+$b2;
         if (($yi || $yi eq 0)
             ) {
@@ -991,7 +1037,6 @@ sub line_line_intersection {
         }
     return $int;
     }
-
 
 sub to_svg {
     my $triios = shift;
@@ -1045,7 +1090,6 @@ sub to_svg {
 
     # offset and scale to avoid limitations of svg renderers
 
-
     my $dispsizex = '640';
     my $dispsizey = '480';
     
@@ -1077,7 +1121,6 @@ sub to_svg {
         if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{segments}};}
         #ignoring any subparametric points for elements
         if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0])], @{$triio->{elements}};}
-
         }
     else {
         if ($spec{edges})    {push @edges, map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{edges}}]}    ltolol(2,$triio->edgelist);}
@@ -1098,7 +1141,6 @@ sub to_svg {
                 }
             }
         }
-
 
     if ($vorio) {
         if (ref($vorio) =~ /HASH/ && defined $vorio->{nodes}) {
@@ -1177,12 +1219,11 @@ sub to_svg {
         if ($scaled_miny-$cir_miny > $margin_y_lo) {$margin_y_lo = ($scaled_miny - $cir_miny) + 5;}
         }
 
-
     open(SVGO,'>',$fn);
     print SVGO sprintf <<"EOS", $dispsizex, $dispsizey, -$margin_x_lo, -$margin_y_hi, $scaled_maxx + ($margin_x_lo + $margin_x_hi), $scaled_maxy + ($margin_y_lo + $margin_y_hi), $scaled_maxy;
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
-<svg width="%s" height="%s" viewBox="%s %s %s %s" preservAspectRatio="minXminY meet" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
+<svg width="%s" height="%s" viewBox="%s %s %s %s" preserveAspectRatio="xMinYMin meet" xmlns="http://www.w3.org/2000/svg">
 <g transform="scale(1,-1) translate(0,-%s)">
 EOS
 
@@ -2054,15 +2095,9 @@ always desirable to multiply the number of polygon points to achieve short
 intervals.
 
 =for html <div style="width:30%;float:right;display:inline-block;text-align:center;">
-<svg width="57%" viewBox="-23 -11 204 165" preservAspectRatio="minXminY meet" style="margin-top:15px;" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
-<style type="text/css">
-.edge {stroke:gray;stroke-width:2;}
-.seg  {stroke:black;stroke-width:1;}
-.vedge {stroke:blue;stroke-width:2;}
-.vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;}
-</style>
+<svg viewBox="-23 -11 204 165" width="57%" preserveAspectRatio="xMinYMin meet" style="margin-top:15px;" xmlns="http://www.w3.org/2000/svg" version="1.1">
+<style type="text/css"> .edge {stroke:gray;stroke-width:2;} .seg  {stroke:black;stroke-width:1;} .vedge {stroke:blue;stroke-width:2;} .vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;} </style>
 <g transform="scale(1,-1) translate(0,-117.66968108291)">
-<!-- edges -->
 <line x1="0" y1="0" x2="58.835" y2="58.835" class="edge"/>
 <line x1="58.835" y1="58.835" x2="0" y2="58.835" class="edge"/>
 <line x1="0" y1="58.835" x2="0" y2="0" class="edge"/>
@@ -2084,7 +2119,6 @@ intervals.
 <line x1="176.505" y1="58.835" x2="117.67" y2="58.835" class="edge"/>
 <line x1="176.505" y1="29.417" x2="176.505" y2="58.835" class="edge"/>
 <line x1="117.67" y1="58.835" x2="58.835" y2="58.835" class="edge"/>
-<!-- segments -->
 <line x1="0" y1="0" x2="0" y2="58.835" class="seg"/>
 <line x1="88.252" y1="0" x2="0" y2="0" class="seg"/>
 <line x1="176.505" y1="0" x2="88.252" y2="0" class="seg"/>
@@ -2097,7 +2131,6 @@ intervals.
 <line x1="29.417" y1="117.67" x2="58.835" y2="117.67" class="seg"/>
 <line x1="0" y1="117.67" x2="29.417" y2="117.67" class="seg"/>
 <line x1="0" y1="58.835" x2="0" y2="117.67" class="seg"/>
-<!-- vor edges -->
 <line x1="29.417" y1="29.417" x2="44.126" y2="14.709" class="vedge"/>
 <line x1="29.417" y1="29.417" x2="29.417" y2="73.544" class="vedge"/>
 <line x1="44.126" y1="14.709" x2="88.252" y2="36.772" class="vedge"/>
@@ -2107,7 +2140,6 @@ intervals.
 <line x1="132.378" y1="14.709" x2="132.378" y2="14.709" class="vedge"/>
 <line x1="132.378" y1="14.709" x2="147.087" y2="44.126" class="vedge"/>
 <line x1="132.378" y1="14.709" x2="88.252" y2="36.772" class="vedge"/>
-<!-- pts -->
 <circle cx="0" cy="58.835" r="3" style="fill:black;"/>
 <circle cx="0" cy="0" r="3" style="fill:black;"/>
 <circle cx="88.252" cy="0" r="3" style="fill:black;"/>
@@ -2120,7 +2152,6 @@ intervals.
 <circle cx="58.835" cy="117.67" r="3" style="fill:black;"/>
 <circle cx="29.417" cy="117.67" r="3" style="fill:black;"/>
 <circle cx="0" cy="117.67" r="3" style="fill:black;"/>
-<!-- vor pts -->
 <circle cx="29.417" cy="29.417" r="3" style="fill:blue;"/>
 <circle cx="44.126" cy="14.709" r="3" style="fill:blue;"/>
 <circle cx="29.417" cy="73.544" r="3" style="fill:blue;"/>
@@ -2131,7 +2162,6 @@ intervals.
 <circle cx="132.378" cy="14.709" r="3" style="fill:blue;"/>
 <circle cx="147.087" cy="44.126" r="3" style="fill:blue;"/>
 <circle cx="88.252" cy="36.772" r="3" style="fill:blue;"/>
-<!-- circles -->
 <circle cx="29.417" cy="29.417" r="41.601" class="vcirc"/>
 <circle cx="44.126" cy="14.709" r="46.512" class="vcirc"/>
 <circle cx="29.417" cy="73.544" r="32.890" class="vcirc"/>
@@ -2144,15 +2174,9 @@ intervals.
 <circle cx="88.252" cy="36.772" r="36.772" class="vcirc"/>
 </g></svg>
 <br/><small>Voronoi edges (blue)<br/> as a poor medial<br/>axis approximation</small><br/>
-<svg width="50%" viewBox="-5 -5 186 127" preservAspectRatio="minXminY meet" style="margin-top:23px;" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:slic3r="http://slic3r.org/namespaces/slic3r">
-<style type="text/css">
-.edge {stroke:gray;stroke-width:2;}
-.seg  {stroke:black;stroke-width:1;}
-.vedge {stroke:blue;stroke-width:2;}
-.vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;}
-</style>
+<svg viewBox="-5 -5 186 127" width="50%"   preserveAspectRatio="xMinYMin meet" style="margin-top:23px;" xmlns="http://www.w3.org/2000/svg" version="1.1">
+<style type="text/css"> .edge {stroke:gray;stroke-width:2;} .seg  {stroke:black;stroke-width:1;} .vedge {stroke:blue;stroke-width:2;} .vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;} </style>
 <g transform="scale(1,-1) translate(0,-117.66968108291)">
-<!-- edges -->
 <line x1="0" y1="0" x2="58.835" y2="58.835" class="edge"/>
 <line x1="58.835" y1="58.835" x2="0" y2="58.835" class="edge"/>
 <line x1="0" y1="58.835" x2="0" y2="0" class="edge"/>
@@ -2174,7 +2198,6 @@ intervals.
 <line x1="176.505" y1="58.835" x2="117.67" y2="58.835" class="edge"/>
 <line x1="176.505" y1="29.417" x2="176.505" y2="58.835" class="edge"/>
 <line x1="117.67" y1="58.835" x2="58.835" y2="58.835" class="edge"/>
-<!-- segments -->
 <line x1="0" y1="0" x2="0" y2="58.835" class="seg"/>
 <line x1="88.252" y1="0" x2="0" y2="0" class="seg"/>
 <line x1="176.505" y1="0" x2="88.252" y2="0" class="seg"/>
@@ -2187,7 +2210,6 @@ intervals.
 <line x1="29.417" y1="117.67" x2="58.835" y2="117.67" class="seg"/>
 <line x1="0" y1="117.67" x2="29.417" y2="117.67" class="seg"/>
 <line x1="0" y1="58.835" x2="0" y2="117.67" class="seg"/>
-<!-- vor edges -->
 <line x1="34.465" y1="34.465" x2="49.287" y2="30.192" class="vedge"/>
 <line x1="34.465" y1="34.465" x2="29.417" y2="73.544" class="vedge"/>
 <line x1="49.287" y1="30.192" x2="88.252" y2="29.417" class="vedge"/>
@@ -2197,7 +2219,6 @@ intervals.
 <line x1="161.796" y1="14.709" x2="132.378" y2="29.417" class="vedge"/>
 <line x1="132.378" y1="29.417" x2="161.796" y2="44.126" class="vedge"/>
 <line x1="132.378" y1="29.417" x2="88.252" y2="29.417" class="vedge"/>
-<!-- pts -->
 <circle cx="0" cy="58.835" r="3" style="fill:black;"/>
 <circle cx="0" cy="0" r="3" style="fill:black;"/>
 <circle cx="88.252" cy="0" r="3" style="fill:black;"/>
@@ -2210,7 +2231,6 @@ intervals.
 <circle cx="58.835" cy="117.67" r="3" style="fill:black;"/>
 <circle cx="29.417" cy="117.67" r="3" style="fill:black;"/>
 <circle cx="0" cy="117.67" r="3" style="fill:black;"/>
-<!-- vor pts -->
 <circle cx="34.465" cy="34.465" r="3" style="fill:blue;"/>
 <circle cx="49.287" cy="30.192" r="3" style="fill:blue;"/>
 <circle cx="29.417" cy="73.544" r="3" style="fill:blue;"/>
@@ -2221,7 +2241,6 @@ intervals.
 <circle cx="132.378" cy="29.417" r="3" style="fill:blue;"/>
 <circle cx="161.796" cy="44.126" r="3" style="fill:blue;"/>
 <circle cx="88.252" cy="29.417" r="3" style="fill:blue;"/>
-<!-- circles -->
 <circle cx="34.465" cy="34.465" r="34.464" class="vcirc"/>
 <circle cx="49.287" cy="30.192" r="30.192" class="vcirc"/>
 <circle cx="29.417" cy="73.544" r="29.417" class="vcirc"/>
@@ -2236,19 +2255,19 @@ intervals.
 <br/><small>improved approximation<br/>after calling mic_adust()</small><br/>
 </div>
 
-At any point on the true medial axis, there is a maximal inscribed circle,
+At any point on the true medial axis, there is a maximum inscribed circle,
 with it's center on the medial axis, and tangent to the polygon in at least
 two places.
 
 The C<mic_adjust()> function moves each Voronoi node so that it becomes the 
-center of a circle that touches the polygon at two points. In simple cases this
-is a maximal inscribed circle, and the point is on the medial axis. And when 
-it's not, it still should be a much better approximation than the original 
-point location. The radius to the tangent on the polygon is stored with the 
-updated Voronoi node.
+center of a circle that is tangent to the polygon at two points. In simple 
+cases this is a maximum inscribed circle, and the point is on the medial axis.
+And when it's not, it still should be a much better approximation than the 
+original point location. The radius to the tangent on the polygon is stored 
+with the updated Voronoi node.
 
-After calling c<mic_adjust()>, the modified Voronoi topology can be used as a
-list of maximal inscribed circles, from which can be derive a straighter, 
+After calling C<mic_adjust()>, the modified Voronoi topology can be used as a
+list of maximum inscribed circles, from which can be derive a straighter, 
 better medial axis approximation, without having to increase the number of 
 sample points on the polygon.
 
@@ -2272,8 +2291,8 @@ fill the gap.
 Currently Triangle's option strings are exposed to give more complete access to
 its features. More of these options, and perhaps certain common combinations of 
 them, will likely be wrapped in method-call getter-setters. I would prefer to 
-preserve the ability to use the option strings directly, but it may be necessary
-at some point to hide them completely behind a less idiosyncratic interface.
+preserve the ability to use the option strings directly, but it may be better
+at some point to hide them completely behind a more descriptive interface.
 
 
 =head1 AUTHOR
