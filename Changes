@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.08 Thursday Dec 13 11:07:00 2012
+
+  - fix for undefined value test in line intersections
+
 0.07 Friday Nov 30 02:50:00 2012
 
   - mic_adjust() improvements
