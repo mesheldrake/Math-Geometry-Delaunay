@@ -630,7 +630,7 @@ sub seg_poly_intersections {
                 }
             #if (!isNaN(xi) &&
             if (
-                ($xi || $xi eq 0) &&
+                defined $xi &&
                 ($xi < $lowhix[1] || $xi eq $lowhix[1]) && 
                 ($xi > $lowhix[0] || $xi eq $lowhix[0]) &&
                 ($xi < $lowhiu[1] || $xi eq $lowhiu[1]) && 
@@ -1021,9 +1021,7 @@ sub line_line_intersection {
         $xi=($b2-$b1)/$dm;
         }
     if ($m1 ne 'Inf') {
-        if (
-            ($xi || $xi eq 0)
-            ) {
+        if (defined $xi) {
             my $y=($m1*$xi)+$b1;
             $int = [$xi,$y];
             }
