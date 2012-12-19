@@ -1,5 +1,12 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.10 Wednesday Dec 19 07:36:00 2012
+
+  - The floating point unit config done by Triangle under Linux could
+    trigger a floating point exception when doing subtraction (at least)
+    involving infinity (usually an acceptable operation). Triangle's FPU
+    config has been disabled in favor of the FPU config done by xpfpa.h.
+
 0.09 Tuesday Dec 18 19:08:00 2012
 
   - fixed typo in segment intersection code that made addHole() fail
