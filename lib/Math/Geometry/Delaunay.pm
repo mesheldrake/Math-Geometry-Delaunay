@@ -2085,15 +2085,6 @@ might shade each triangle according to the average of a node attribute.
 
 =head2 mic_adjust
 
-Warning: not yet thoroughly tested; may move elsewhere
-
-One use of the Voronoi diagram of a tessellated polygon is to derive an
-approximation of the polygon's medial axis by pruning infinite rays and perhaps
-trimming or refining remaining branches. The approximation improves as
-intervals between sample points on the polygon become shorter. But it's not 
-always desirable to multiply the number of polygon points to achieve short
-intervals.
-
 =for html <div style="width:30%;float:right;display:inline-block;text-align:center;">
 <svg viewBox="-23 -11 204 165" width="57%" preserveAspectRatio="xMinYMin meet" style="margin-top:15px;" xmlns="http://www.w3.org/2000/svg" version="1.1">
 <style type="text/css"> .edge {stroke:gray;stroke-width:2;} .seg  {stroke:black;stroke-width:1;} .vedge {stroke:blue;stroke-width:2;} .vcirc {stroke-width:0.8;stroke:blue;fill:none;opacity:0.7;} </style>
@@ -2254,6 +2245,15 @@ intervals.
 </g></svg>
 <br/><small>improved approximation<br/>after calling mic_adust()</small><br/>
 </div>
+
+Warning: not yet thoroughly tested; may move elsewhere
+
+One use of the Voronoi diagram of a tessellated polygon is to derive an
+approximation of the polygon's medial axis by pruning infinite rays and perhaps
+trimming or refining remaining branches. The approximation improves as
+intervals between sample points on the polygon become shorter. But it's not 
+always desirable to multiply the number of polygon points to achieve short
+intervals.
 
 At any point on the true medial axis, there is a maximum inscribed circle,
 with it's center on the medial axis, and tangent to the polygon in at least
