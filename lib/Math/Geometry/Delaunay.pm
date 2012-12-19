@@ -617,21 +617,25 @@ sub ray_from_index_poly_intersections {
 
         my $b1;
         my $b2;
+        my $xi;
 
-        my  $xi;
-        my $dm = $m1 - $m2;
-        if    ($m1 eq 'Inf' && $m2 ne 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);
-        }
-        elsif ($m2 eq 'Inf' && $m1 ne 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);
-        }
+        # Arranged like this to avoid m1-m2 with infinity involved, which works
+        # in other contexts, but can trigger a floating point exception here.
+        my $dm;
+        if ($m1 != 'Inf' && $m2 != 'Inf') {$dm = $m1 - $m2;}
+        elsif ($m1 == 'Inf' && $m2 == 'Inf') {return;}
+        else {$dm='Inf';}
+
+        if    ($m1 == 'Inf' && $m2 != 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
+        elsif ($m2 == 'Inf' && $m1 != 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
         elsif (abs($dm) > 0.000000000001) {
             $b1 = $y1 - ($m1 * $x1);
             $b2 = $v1 - ($m2 * $u1);    
             $xi=($b2-$b1)/$dm;
             }
         my @lowhiu=($u2>$u1)?($u1,$u2):($u2,$u1);
-        if ($m1 ne 'Inf') {
-            if ($m2 eq 'Inf' &&   ($u2<$lowhix[0] || $u2>$lowhix[1]) ) {
+        if ($m1 != 'Inf') {
+            if ($m2 == 'Inf' &&   ($u2<$lowhix[0] || $u2>$lowhix[1]) ) {
                 next;
                 }
             if (
@@ -643,7 +647,7 @@ sub ray_from_index_poly_intersections {
                 ) {
                 my $y=($m1*$xi)+$b1;
                 my @lowhiv=($v2>$v1)?($v1,$v2):($v2,$v1);
-                if ($m2 eq 'Inf' &&
+                if ($m2 == 'Inf' &&
                     ($y<$lowhiv[0] || $y>$lowhiv[1])
                     ) {
                     next;
@@ -653,7 +657,7 @@ sub ray_from_index_poly_intersections {
                     }
                 }
             }
-        elsif ($m2 ne 'Inf') {#so $m1 is Inf
+        elsif ($m2 != 'Inf') {#so $m1 is Inf
             if ($x1 < $lowhiu[0] || $x1 > $lowhiu[1] && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
                 next;
                 }
@@ -876,7 +880,6 @@ sub mic_adjust {
                     if ($center) {
                         $new_vnode_points[-1] = $center;
                         $new_vnode_radii[-1] = dist2d($center,$foot);
-                        # ahhh. Much better.
                         }
                     }
                 }
@@ -899,7 +902,7 @@ sub getFoot {
     if ($m == 0) {
         if ($x >= $sortx[0] && $x <= $sortx[1]) {$foot=[$x, $seg->[0]->[1]];}
         }
-    elsif ($m =~ /inf/) {
+    elsif ($m == 'inf') {
         if ($y >= $sorty[0] && $y <= $sorty[1]) {$foot=[$seg->[0]->[0], $y];}
         }
     else {
@@ -943,20 +946,26 @@ sub seg_seg_intersection {
 
     my $b1;
     my $b2;
+    my $xi;
 
-    my  $xi;
-    my $dm = $m1 - $m2;
-    if    ($m1 eq 'Inf' && $m2 ne 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
-    elsif ($m2 eq 'Inf' && $m1 ne 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
+    # Arranged like this to avoid m1-m2 with infinity involved, which works
+    # in other contexts, but can trigger a floating point exception here.
+    my $dm;
+    if ($m1 != 'Inf' && $m2 != 'Inf') {$dm = $m1 - $m2;}
+    elsif ($m1 == 'Inf' && $m2 == 'Inf') {return;}
+    else {$dm='Inf';}
+
+    if    ($m1 == 'Inf' && $m2 != 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
+    elsif ($m2 == 'Inf' && $m1 != 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
     elsif (abs($dm) > 0.000000000001) {
         $b1 = $y1 - ($m1 * $x1);
         $b2 = $v1 - ($m2 * $u1);    
         $xi=($b2-$b1)/$dm;
         }
     my @lowhiu=($u2>$u1)?($u1,$u2):($u2,$u1);
-    if ($m1 ne 'Inf') {
+    if ($m1 != 'Inf') {
         my @lowhix=($x2>$x1)?($x1,$x2):($x2,$x1);
-        if ($m2 eq 'Inf' &&   ($u2<$lowhix[0] || $u2>$lowhix[1]) ) {
+        if ($m2 == 'Inf' &&   ($u2<$lowhix[0] || $u2>$lowhix[1]) ) {
             return;
             }
         if (
@@ -968,7 +977,7 @@ sub seg_seg_intersection {
             ) {
             my $y=($m1*$xi)+$b1;
             my @lowhiv=($v2>$v1)?($v1,$v2):($v2,$v1);
-            if ($m2 eq 'Inf' &&
+            if ($m2 == 'Inf' &&
                 ($y<$lowhiv[0] || $y>$lowhiv[1])
                 ) {
                 return;
@@ -978,7 +987,7 @@ sub seg_seg_intersection {
                 }
             }
         }
-    elsif ($m2 ne 'Inf') { #so $m1 is Inf
+    elsif ($m2 != 'Inf') { #so $m1 is Inf
 
         if ($x1 < $lowhiu[0] || $x1 > $lowhiu[1] && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
             return;
@@ -1015,21 +1024,28 @@ sub line_line_intersection {
     my $b2;
 
     my  $xi;
-    my $dm = $m1 - $m2;
-    if    ($m1 eq 'Inf' && $m2 ne 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
-    elsif ($m2 eq 'Inf' && $m1 ne 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
+
+    # Arranged like this to avoid m1-m2 with infinity involved, which works
+    # in other contexts, but can trigger a floating point exception here.
+    my $dm;
+    if ($m1 != 'Inf' && $m2 != 'Inf') {$dm = $m1 - $m2;}
+    elsif ($m1 == 'Inf' && $m2 == 'Inf') {return;}
+    else {$dm='Inf';}
+
+    if    ($m1 == 'Inf' && $m2 != 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
+    elsif ($m2 == 'Inf' && $m1 != 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
     elsif (abs($dm) > 0.000000000001) {
         $b1 = $y1 - ($m1 * $x1);
         $b2 = $v1 - ($m2 * $u1);    
         $xi=($b2-$b1)/$dm;
         }
-    if ($m1 ne 'Inf') {
+    if ($m1 != 'Inf') {
         if (defined $xi) {
             my $y=($m1*$xi)+$b1;
             $int = [$xi,$y];
             }
         }
-    elsif ($m2 ne 'Inf') { # so $m1 is Inf
+    elsif ($m2 != 'Inf') { # so $m1 is Inf
         my $yi = ($m2*$xi)+$b2;
         if ($yi || $yi eq 0) {
             $int = [$xi,$yi];
