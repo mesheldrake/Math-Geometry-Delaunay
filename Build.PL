@@ -36,15 +36,19 @@ my $builder = Module::Build->new(
 # Triangle disables extended-precision doubles on x86 processors to make its
 # exact arithmatic routines, which depend on the rounding error of normal-precision
 # doubles, work properly. How to disable extended-precision doubles is 
-# compiler-specific, and Triangle will do the right thing for x86 processors
+# compiler-specific, and Triangle tries to do the right thing for x86 processors
 # compiling with gcc under Linux or MSVC, if we pass either the LINUX
 # or CPU86 compiler flag.
 
-# However,
-# we're also going to use xpfpa.h from 
+# But it turns out what Triangle does on LINUX affects the way math with infinity
+# works, so that subtraction (at least) with 'inf' can cause a floating point
+# exception, where that's not usually the case. So we're not going to use the
+# LINUX compiler flag anymore, and we'll just depend on xpfpa.h.
+
+# We're using xpfpa.h from 
 # http://www.christian-seiler.de/projekte/fpmath/
-# to try to set the FPU state, and more significantly, to restore the state
-# to whateverever it was before each call to triangulate().
+# to set the FPU state, and more significantly, to restore the state
+# to whatever it was before each call to triangulate().
 # The HAVE__CONTROLFP (Microsoft) and HAVE__FPU_SETCW (Linux) flags will give us
 # the right macros for the platform.
 
@@ -77,7 +81,7 @@ else {
             } 
         }
     elsif ($^O =~ /linux/i) {
-        push @{$builder->extra_compiler_flags()}, "-DLINUX", "-DHAVE__FPU_SETCW";
+        push @{$builder->extra_compiler_flags()}, "-DHAVE__FPU_SETCW";
         }
 
     # Based on Perl configure hints that set usemymalloc=y for certain platforms
