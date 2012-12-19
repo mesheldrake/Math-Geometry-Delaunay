@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.09 Tuesday Dec 18 19:08:00 2012
+
+  - fixed typo in segment intersection code that made addHole() fail
+
 0.08 Thursday Dec 13 11:07:00 2012
 
   - fix for undefined value test in line intersections
