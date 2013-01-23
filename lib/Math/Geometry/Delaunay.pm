@@ -13,6 +13,7 @@ BEGIN {
     use XSLoader;
     $VERSION = '0.10';
     XSLoader::load('Math::Geometry::Delaunay');
+    exactinit();
     }
 
 use constant {
@@ -39,10 +40,10 @@ sub new {
     polylines    => [],
     points       => [],
     segments     => [],
-        outnodes     => [], #for cache, first time C output arrays are imported
-        voutnodes    => [], #for cache
-        segptrefs    => {}, #used to avoid dups of points added with addSegment
-        };
+    outnodes     => [], #for cache, first time C output arrays are imported
+    voutnodes    => [], #for cache
+    segptrefs    => {}, #used to avoid dups of points added with addSegments
+    };
 
     $self->{optstr} = '';
     # Triangle switches
@@ -178,10 +179,10 @@ sub addPolyline {
     return;
     }
 
-sub addSegment {
+sub addSegments {
     my $self = shift;
-    my $points = shift;
-    push @{$self->{poly}->{points}}, @{$points};
+    my $segments = shift;
+    push @{$self->{poly}->{segments}}, @{$segments};
     return;
     }
 
@@ -219,37 +220,47 @@ sub prepPoly {
     my @allsegs;
 
     if (@{$self->{poly}->{segments}}) {
+
         # The list of segments is the most likely to have duplicate points.
         # Some algorithms in this space result in lists of segments,
         # perhaps listing subsegments of intersecting segments,
         # or representing a boundary or polygon with out-of-order,
         # non-contiguous segment lists, where shared vertices are
         # repeated in each segment's record.
+
         # addSegments() is meant for that kind of data
         # and this is where we boil the duplicate points down,
-        # so Triangle doesn't have to. 
+        # so Triangle doesn't have to.
+
+        # We look both for duplicate point references and duplicate coordinates.
+        # The coordinate check could collapse points that are topologically
+        # unique, or it could fail to merge points that should be considered
+        # duplicates - but we hope most of the time it does the best thing.
+
         foreach my $seg (@{$self->{poly}->{segments}}) {
-            if (!defined $self->{segrefs}->{$seg->[0]} &&
-                !defined $self->{segrefs}->{$seg->[0]->[0]}.','.$self->{segrefs}->{$seg->[0]->[1]}
+            if (   !defined($self->{segptrefs}->{$seg->[0]}) 
+                && !defined($self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]})
                 ) {
                 push @allpts, $seg->[0];
-                $self->{segrefs}->{$seg->[0]}=$#allpts;
-                $self->{segrefs}->{$seg->[0]->[0]}.','.$self->{segrefs}->{$seg->[0]->[1]} = $#allpts;
+                $self->{segptrefs}->{$seg->[0]} = $#allpts;
+                $self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]} = $#allpts;
                 }
-            push @allsegs, $self->{segrefs}->{$seg->[0]};
-            if (!defined $self->{segrefs}->{$seg->[1]} &&
-                !defined $self->{segrefs}->{$seg->[1]->[0]}.','.$self->{segrefs}->{$seg->[1]->[1]}
+            push @allsegs, $self->{segptrefs}->{$seg->[0]}
+                           // $self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]}; #/
+            if (   !defined($self->{segptrefs}->{$seg->[1]}) 
+                && !defined($self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]})
                 ) {
                 push @allpts, $seg->[1];
-                $self->{segrefs}->{$seg->[1]}=$#allpts;
-                $self->{segrefs}->{$seg->[1]->[0]}.','.$self->{segrefs}->{$seg->[1]->[1]} = $#allpts;
+                $self->{segptrefs}->{$seg->[1]} = $#allpts;
+                $self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]} = $#allpts;
                 }
-            push @allsegs, $self->{segrefs}->{$seg->[1]};            
+            push @allsegs, $self->{segptrefs}->{$seg->[1]}
+                           // $self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]}; #/            
             }
         }
-    undef $self->{segrefs};
+    $self->{segptrefs} = {};
 
-    if (@{$self->{poly}->{polylines}}) {
+    if (@{$self->{poly}->{polylines}} || @allsegs) {
         # doing PSLG - add poly flag to options
         $self->{optstr} = 'p'.$self->{optstr};
         #set up points and segments lists for each polygon and polyline
@@ -328,6 +339,8 @@ sub triangulate() {
     return;
     }
 
+# This probably performs well, but it does show up high enough in profiler
+# reports that it's worth looking into speed-up. Consider something with unpack maybe.
 sub ltolol {($#_<$_[0])?():map [@_[$_*$_[0]+1..$_*$_[0]+$_[0]]],0..$#_/$_[0]-1}#perl.
 
 sub nodes {
@@ -492,10 +505,10 @@ sub topology {
             }
         }
     return {
-        nodes    => [@nodes],
-        edges    => [@edges],
-        segments => [@segs],
-        elements => [@eles]
+        nodes    => \@nodes,
+        edges    => \@edges,
+        segments => \@segs,
+        elements => \@eles
         };
     }
 
@@ -621,11 +634,13 @@ sub ray_from_index_poly_intersections {
 
         # Arranged like this to avoid m1-m2 with infinity involved, which works
         # in other contexts, but can trigger a floating point exception here.
+        # Turns out the exception happens when we let Triangle set the FPU
+        # control word, but not when we use XPFPA.h to take care of that, but
+        # leaving it this as it is in case that doesn't fix that everywhere.
         my $dm;
         if ($m1 != 'Inf' && $m2 != 'Inf') {$dm = $m1 - $m2;}
         elsif ($m1 == 'Inf' && $m2 == 'Inf') {return;}
         else {$dm='Inf';}
-
         if    ($m1 == 'Inf' && $m2 != 'Inf') {$xi = $x1;$b2 = $v1 - ($m2 * $u1);}
         elsif ($m2 == 'Inf' && $m1 != 'Inf') {$xi = $u1;$b1 = $y1 - ($m1 * $x1);}
         elsif (abs($dm) > 0.000000000001) {
@@ -654,11 +669,14 @@ sub ray_from_index_poly_intersections {
                     }
                 else {
                     push(@intersections,[$xi,$y]);
+                    if ($y eq $v1 || $y eq $v2) {
+                        $i++; # avoid duplicates at endpoints
+                        }
                     }
                 }
             }
         elsif ($m2 != 'Inf') {#so $m1 is Inf
-            if ($x1 < $lowhiu[0] || $x1 > $lowhiu[1] && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
+            if (($x1 < $lowhiu[0] || $x1 > $lowhiu[1]) && ! ($x1 eq $lowhiu[0] || $x1 eq $lowhiu[1])) {
                 next;
                 }
             my @lowhiv=($v2>$v1)?($v1,$v2):($v2,$v1);
@@ -670,6 +688,9 @@ sub ray_from_index_poly_intersections {
                 ($yi > $lowhiv[0] || $yi eq $lowhiv[0])
                 ) {
                 push(@intersections,[$xi,$yi]);
+                if ($xi eq $u1 || $xi eq $u2) {
+                    $i++; # avoid duplicates at endpoints
+                    }
                 }
             }
         }
@@ -692,44 +713,73 @@ sub mic_adjust {
 
     my @new_vnode_points; # voronoi vertices moved to MIC center points
     my @new_vnode_radii;  # will be calculated and added to node data
+    my @new_vnode_tangents;  # where the MIC touches the boundary PSLG
 
     my $dsioff=scalar(@{$topo->{nodes}});
 
     my $vnc=-1; # will use to look up triangle that corresponds to the voronoi node
+    # $vnc can probably be replaced with $vnode->{index}
 
     foreach my $vnode (@{$vtopo->{nodes}}) {
         $vnc++;
 
         push(@new_vnode_points,$vnode->{point});
-        push(@new_vnode_radii,dist2d($vnode->{point},$topo->{edges}->[$vnode->{edges}->[0]->{index}]->{nodes}->[0]->{point}));
+        push(@new_vnode_radii,undef);
+        push(@new_vnode_tangents,[]);
 
         my $boundary_edge;
 
         if (@{$vnode->{edges}} == 3) {
             my @all_edges = map {$topo->{edges}->[$_->{index}]} @{$vnode->{edges}};
             my @boundary_edges = grep {$_->{marker}} @all_edges;
-            @boundary_edges = sort {dist2d($b->{nodes}->[0]->{point},$b->{nodes}->[1]->{point}) 
-                                    <=> 
-                                    dist2d($a->{nodes}->[0]->{point},$a->{nodes}->[1]->{point})} 
-                                    @boundary_edges;        
 
             my @opposite_boundary_edges;
             my @opposite_boundary_feet;
 
+            my $branch_node_edge_index1;
+            my $branch_node_edge_index2;
+            my $branch_node_third_tan;
+
+            # BRANCH NODE
+            # The corresponding Delaunay triangle has no edges on the PSLG boundary,
+            # but touches the boundary at its vertices. This corresponds to a
+            # node with three edges in the medial axis approximation.
             if (@boundary_edges == 0) {
-                # triangle that touches boundary only at it's three vertices
-                # and not any of it's edges
-                
-                # vnode and delaunay tri lists correspond
-                my @corner_boundary_edges = grep $_->{marker}, map @{$_->{edges}}, @{$topo->{elements}->[$vnc]->{nodes}};
+                $vnode->{isbranchnode} = 1;
+
+                # Orient nodes in edges emanating from this branch node so that
+                # the first node is always the branch node.
+                # The notion is that direction is always outward from a branch node.
+                # This will be a problem if two branch nodes link to each other.
+                $_->{nodes} = [$vnode,$_->{nodes}->[0]!=$vnode?$_->{nodes}->[0]:$_->{nodes}->[1]] for @{$vnode->{edges}};
+
+                # Make sure corners are sorted so they are opposite the Voronoi edges in order.
+                # They may have already been that way, but couldn't determine from Triangle docs.
+                my @corners;
+                for (my $i=0;$i<@{$vnode->{edges}};$i++) {
+                    push @corners, +(grep $_ != $topo->{edges}->[$vnode->{edges}->[$i]->{index}]->{nodes}->[0]
+                                       && $_ != $topo->{edges}->[$vnode->{edges}->[$i]->{index}]->{nodes}->[1], 
+                                       @{$topo->{elements}->[$vnc]->{nodes}}
+                                    )[0];
+                    }
+
+                my @corner_boundary_edges = grep $_->{marker}, map @{$_->{edges}}, @corners;
                 my @corner_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @corner_boundary_edges;
 
-                # this case not handled at the moment
-                # it may be that this is usually safe to leave alone
+                # Handle the case where the three corners are probably the three MIC tangents.
                 if (! grep $_, @corner_boundary_feet) {
+                    $new_vnode_radii[-1] = dist2d($vnode->{point},$topo->{edges}->[$vnode->{edges}->[0]->{index}]->{nodes}->[0]->{point});
+                    $new_vnode_tangents[-1] = [[$corners[2]->{point},
+                                                $corners[1]->{point}],
+                                               [$corners[0]->{point},
+                                                $corners[2]->{point}],
+                                               [$corners[1]->{point},
+                                                $corners[0]->{point}]];
                     next;
                     }
 
+                # Otherwise, set up a case similar to the non-branch node case
+                # by designating feet, a boundary edge, and an opposite edge.
                 my @boundary_feet_edges;
                 for (my $i=0;$i<@corner_boundary_feet;$i+=2) {
                     my $foot;
@@ -741,51 +791,70 @@ sub mic_adjust {
                                     || $corner_boundary_edges[$i]->{nodes}->[0] == $corner_boundary_edges[$i+1]->{nodes}->[1] )
                                    ? $corner_boundary_edges[$i]->{nodes}->[0]->{point}
                                    : $corner_boundary_edges[$i]->{nodes}->[1]->{point};
-                        # edge left undefined, or "false" to signal this case
-                        push @boundary_feet_edges, [$foot,undef];
+                        # edge evaluates to "false" to signal this case
+                        push @boundary_feet_edges, [$foot,undef,$i/2];
                         }
+                    # otherwise keep foot and edge ref
                     else {
-                        if ($corner_boundary_feet[$i]  ) {push @boundary_feet_edges, [$corner_boundary_feet[$i],  $corner_boundary_edges[$i]];}
-                        if ($corner_boundary_feet[$i+1]) {push @boundary_feet_edges, [$corner_boundary_feet[$i+1],$corner_boundary_edges[$i+1]];}
+                        if ($corner_boundary_feet[$i]  ) {push @boundary_feet_edges, [$corner_boundary_feet[$i],  $corner_boundary_edges[$i]  ,$i/2];}
+                        if ($corner_boundary_feet[$i+1]
+                            && ( !$corner_boundary_feet[$i] || 
+                                # screen out duplicates
+                                (  $corner_boundary_feet[$i+1]->[0] ne $corner_boundary_feet[$i]->[0]
+                                && $corner_boundary_feet[$i+1]->[1] ne $corner_boundary_feet[$i]->[1]
+                                )
+                               )
+                           ) {push @boundary_feet_edges, [$corner_boundary_feet[$i+1],$corner_boundary_edges[$i+1],$i/2];}
                         }
                     }
 
                 @boundary_feet_edges = sort {dist2d($a->[0],$vnode->{point}) <=> dist2d($b->[0],$vnode->{point})} @boundary_feet_edges;
 
-                # closest edge
+                # closest edge treated as boundary edge, similar to non-branch node handling
                 my $first_with_edge = +(grep {$_->[1]} @boundary_feet_edges)[0];
 
                 $boundary_edge = {nodes=>[$first_with_edge->[1]->{nodes}->[0],$first_with_edge->[1]->{nodes}->[1]]};
 
-                # Take the next closest edge
-                # Probably leaves the furthest edge not touched by mic, even in 
-                # cases where that should be fixable. The fix might be to slide
-                # the two closest feet toward the third, but you have to check 
-                # a bunch of stuff to know if that's reasonable. Might be worth
-                # it though for getting good results on low edge-res polygons.
-                # On the other hand, smart subdivision of the polygon can probably
-                # fix this issue in most cases - like make sure to have 
-                # points bracketing corners closely and evenly. That should tend
-                # to pull branch nodes at narrow square ends close to their 
-                # proper place. (Branch nodes typically correspond to triangles 
-                # that have no edges on the boundary.)
-                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge} @boundary_feet_edges)[0];
-                
+                # next closest edge treated as opposite boundary edge, similar to non-branch node handling
+                #   (that is, next closest that's also not connected to the same
+                #   corner as the closest)
+                my $first_not_first_with_edge = +(grep {$_ != $first_with_edge && $_->[2] != $first_with_edge->[2]} @boundary_feet_edges)[0];
+
                 $opposite_boundary_feet[0]  = $first_not_first_with_edge->[0];
                 $opposite_boundary_edges[0] = $first_not_first_with_edge->[1];
+
+                # Use these later to match up tangent point pairs with Voronoi edges.
+                $branch_node_edge_index1 = $first_with_edge->[2];
+                $branch_node_edge_index2 = $first_not_first_with_edge->[2];
+
+                my @threst = grep {   $_ != $first_with_edge 
+                                   && $_ != $first_not_first_with_edge 
+                                   && $_->[2] != $first_with_edge->[2]
+                                   && $_->[2] != $first_not_first_with_edge->[2]
+                                   } @boundary_feet_edges;
+                # Not completely thought out, but results look good so far -
+                # This "tangent point" is not (generally) touched by the approximate 
+                # MIC, but it might be worth trying to shift the approx MIC in
+                # a later step to come closer to this, when possible.
+                # Even without that extra shift attempt, it's useful to have 
+                # this when reconstructing a polygon from the approximate 
+                # medial axis enabled by mic_adjust(). 
+                $branch_node_third_tan = $threst[0]->[0];
                 }
 
-            if (@boundary_edges == 1
-                || @boundary_edges == 2
-                ) {
+            # NON-BRANCH NODE
+            # The corresponding Delaunay triangle has one or two edges 
+            # on the PSLG boundary.  This corresponds to a node with two edges 
+            # in the medial axis approximation.
+            if (@boundary_edges == 1 || @boundary_edges == 2) {
 
-                $boundary_edge=$boundary_edges[0];
+                $boundary_edge = $boundary_edges[0];
 
                 my $bef = getFoot([$boundary_edge->{nodes}->[0]->{point},$boundary_edge->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
                 my $ber = sqrt(($vnode->{point}->[0]-$bef->[0])**2 + ($vnode->{point}->[1]-$bef->[1])**2);
 
                 if (@boundary_edges == 2) {
-                    # if other boundary edge closer make that the boundary edge
+                    # If the other boundary edge is closer, make that the boundary edge.
                     my $obef = getFoot([$boundary_edges[1]->{nodes}->[0]->{point},$boundary_edges[1]->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1]);
                     next if (!$obef);
                     my $ober = sqrt(($vnode->{point}->[0]-$obef->[0])**2 + ($vnode->{point}->[1]-$obef->[1])**2);
@@ -803,7 +872,7 @@ sub mic_adjust {
 
                 if (@boundary_edges == 1
                     # || @boundary_edges == 2
-                    ) { # should apply to ==2 too, but should screen out the "opposite" that is also "adjacent" in that case
+                    ) { # should apply to ==2 too, maybe, but should screen out the "opposite" that is also "adjacent" in that case
                     my @adjacent_boundary_edges = grep {$_->{marker} && $_ != $boundary_edge} map @{$_->{edges}}, @{$boundary_edge->{nodes}};
                     my @adjacent_boundary_feet = map {getFoot([$_->{nodes}->[0]->{point},$_->{nodes}->[1]->{point}],$vnode->{point}->[0],$vnode->{point}->[1])} @adjacent_boundary_edges;
                     # if any adjacent bounds closer, replace $boundary_edge with closest
@@ -842,8 +911,13 @@ sub mic_adjust {
 
                 }
 
+            # FIND THE TWO TANGENT POINTS, RADIUS, AND SHIFT POINT TO MIC CENTER
+            
             # Only one defined unique foot should be in @opposite_boundary_feet
-            # at this point.
+            # at this point, though that wasn't always the case in the past.
+            # When we're satisfied that it will be the case in the future, we'll
+            # remove the for loop.
+
             for (my $i = 0; $i < @opposite_boundary_feet; $i++) {
                 next if !$opposite_boundary_feet[$i];
                 my $foot = $opposite_boundary_feet[$i];
@@ -880,14 +954,155 @@ sub mic_adjust {
                     if ($center) {
                         $new_vnode_points[-1] = $center;
                         $new_vnode_radii[-1] = dist2d($center,$foot);
+                        # assign the three tangent pairs to a branch node
+                        if (defined $branch_node_edge_index1) {
+                            my $gets_both_found = +(grep $_ != $branch_node_edge_index1 && $_ != $branch_node_edge_index2, (0..2))[0];
+                            $new_vnode_tangents[-1]->[( $gets_both_found         ) % 3] = [$foot, $boundtanpt];
+                            $new_vnode_tangents[-1]->[( $branch_node_edge_index1 ) % 3] = [$branch_node_third_tan, $foot];
+                            $new_vnode_tangents[-1]->[( $branch_node_edge_index2 ) % 3] = [$boundtanpt, $branch_node_third_tan];
+                            }
+                        # assign the two tangent pairs for non-branch nodes
+                        else {
+                            foreach my $edge (@{$vnode->{edges}}) {
+                                next if defined($edge->{vector}) && ($edge->{vector}->[0] != 0 || $edge->{vector}->[1] != 0); # a ray
+                                push @{$new_vnode_tangents[-1]}, [$foot, $boundtanpt];
+                                }
+                            }
                         }
                     }
                 }
             }
+
+        if (!defined $new_vnode_radii[-1]) {
+            # This would be a branch node that had feet, but didn't end up
+            # getting adjusted. This is either an okay edge case or a failure.
+            # Let's watch for a while and see if we end up here.
+            $new_vnode_radii[-1] = dist2d($vnode->{point},$topo->{edges}->[$vnode->{edges}->[0]->{index}]->{nodes}->[0]->{point});
+            print "\nFailure to find radius in Math::Geometery::Delaunay::mic_adjust().\nThe developer would like to know if you come across this.\n";
+            }
+
         }
+
+    # Can probably integrate the node point, radius, and tangents assignments
+    # directly into the above section, and get rid of this temp array stuff.
+    # On the other hand, if we move this toward using matched index lists (more
+    # like Triangle's native output) might just export the lists we made, and not
+    # update the crossref'ed hash structure.
     for (my $i = 0; $i < @{$vtopo->{nodes}}; $i++) {
         $vtopo->{nodes}->[$i]->{point} = $new_vnode_points[$i];
         $vtopo->{nodes}->[$i]->{radius} = $new_vnode_radii[$i];
+        $vtopo->{nodes}->[$i]->{tangents} = $new_vnode_tangents[$i];
+        }
+
+    # Fixup left-right ordering of tangent points, now that
+    # vnodes and their edges should all be nicely centered between them. 
+
+    for (my $i = 0; $i < @{$vtopo->{nodes}}; $i++) {
+        my $vnode = $vtopo->{nodes}->[$i];
+
+        # first pass -  could you do iswithin for vnode in its corresponding triangle
+        # and if not,  shift toward next/previous vnode until it is within
+        # like to intersection of line between tri apex and bound edge
+        # and line between point and next/prev point... or is there trajectory
+        # based on two (usually) boundary edges where the tangents are?
+        # 
+
+        my @fixtangents;
+        my @edges = grep !defined($_->{vector}) || ($_->{vector}->[0] == 0 && $_->{vector}->[1] == 0), @{$vnode->{edges}};
+
+        for (my $j = 0; $j < @edges; $j++) {
+            my $edge = $edges[$j];
+
+            my $tangents = $vnode->{tangents}->[$j]; # tangent pairs correspond to non-ray edges, in order
+            my $other_node = ($edge->{nodes}->[0] != $vnode) ? $edge->{nodes}->[0] : $edge->{nodes}->[1];
+            my $start_node = $vnode;
+
+            # Duplicate node points can happen for common reasons, so go out
+            # to the next node if we got a duplicate. (Three-in-a-row duplicates
+            # shouldn't happen.)
+            if ($vnode->{point}->[0] eq $other_node->{point}->[0] && $vnode->{point}->[1] eq $other_node->{point}->[1]) {
+                my $other_edge = +(grep $_ != $edge && !(defined $_->{vector} && ($_->{vector}->[0] != 0 || $_->{vector}->[1] != 0)), @{$other_node->{edges}})[0];
+                if ($other_edge) {
+                    $other_node = $other_edge->{nodes}->[0] != $other_node ? $other_edge->{nodes}->[0] : $other_edge->{nodes}->[1];
+                    }
+                else { 
+                    # Well, then, if this is a non-branch node, set up a test line 
+                    # using the previous node, heading into this one.
+                    if (@{$vnode->{tangents}} == 2) {
+                        my $other_edge = $edges[$j == 0 ? 1 : 0];
+                        $start_node = ($other_edge->{nodes}->[0] != $vnode) ? $other_edge->{nodes}->[0] : $other_edge->{nodes}->[1];
+                        $other_node = $vnode;
+                        }
+                    #else { die "Couldn't get other edge in duplicate point case\n\n;" }
+                    }
+                }
+
+            # Heading out from the start node to the other node, the first tangent associated 
+            # with this edge should be on the left (a counterclockwise turn), and the
+            # other tangent on the right. We've got Triangle's adaptave robust
+            # orientation code backing up counterclockwise(), for the really close cases.
+            my $ccwl = counterclockwise($start_node->{point}, $other_node->{point}, $tangents->[0]);
+            my $ccwr = counterclockwise($start_node->{point}, $other_node->{point}, $tangents->[1]);
+
+            if ($ccwl < 0) { # first tangent wasn't on the left
+                if ($ccwr > 0) { # but the second was, so we just need to swap them
+                    @{$tangents} = reverse @{$tangents};
+                    }
+                else { # But if both were on the right, something's wrong.
+                    # If this is a branch node, and the other two tangent pairs 
+                    # don't have the same problem, we can fix up the bad one later.
+                    #push @fixtangents, $j;
+                    $vnode->{fixtangents} = [] if !defined $vnode->{fixtangents};
+                    push @{$vnode->{fixtangents}}, $j;
+                    }
+                }
+            elsif ($ccwr > 0) { # Both were on the left. Maybe fix up later.
+                #push @fixtangents, $j;
+                $vnode->{fixtangents} = [] if !defined $vnode->{fixtangents};
+                push @{$vnode->{fixtangents}}, $j;
+                }
+            #elsif ($ccwl eq 0) { die "zero" } # Shouldn't happen. Leave it alone if it does.
+            }
+        }
+    for (my $i = 0; $i < @{$vtopo->{nodes}}; $i++) {
+        if (@{$vtopo->{nodes}->[$i]->{tangents}} == 3 && defined $vtopo->{nodes}->[$i]->{fixtangents} && @{$vtopo->{nodes}->[$i]->{fixtangents}} == 1) {
+            #print "FIXUP TANGENT PAIR FOR ONE BRANCH AT BRANCH NODE\n";
+            #$vtopo->{nodes}->[$i]->{color} = 'orange';
+            # one bad tangent pair out of three for a branch node
+            # infer that it just needs to be reversed if other two pairs were good
+
+            # debug stuff
+            #my @edges = grep !defined($_->{vector}) || ($_->{vector}->[0] == 0 && $_->{vector}->[1] == 0), @{$vtopo->{nodes}->[$i]->{edges}};
+            #my $reconsider_edge = $edges[$vtopo->{nodes}->[$i]->{fixtangents}->[0]];
+            #my $reconsider_node = $reconsider_edge->{nodes}->[0] != $vtopo->{nodes}->[$i] ? $reconsider_edge->{nodes}->[0]:$reconsider_edge->{nodes}->[1];
+            #$reconsider_node->{color} = 'green';
+
+            $vtopo->{nodes}->[$i]->{tangents}->[$vtopo->{nodes}->[$i]->{fixtangents}->[0]] = 
+                  [$vtopo->{nodes}->[$i]->{tangents}->[($vtopo->{nodes}->[$i]->{fixtangents}->[0] + 1) % 3]->[1],
+                   $vtopo->{nodes}->[$i]->{tangents}->[($vtopo->{nodes}->[$i]->{fixtangents}->[0] - 1)    ]->[0]];
+
+            }
+        #if (@{$vtopo->{nodes}->[$i]->{tangents}} == 3 && defined $vtopo->{nodes}->[$i]->{fixtangents} && @{$vtopo->{nodes}->[$i]->{fixtangents}} != 1) {
+            #print "  MORE NEEDED FIXUP: ",scalar(@{$vtopo->{nodes}->[$i]->{fixtangents}}),"\n";
+            # if more than one branch had tangents mixed up...
+            # maybe the other one or two wrong ones are really right?
+            # ambiguous.
+        #    $vtopo->{nodes}->[$i]->{color} = 'orange';
+        #    }
+        if (   @{$vtopo->{nodes}->[$i]->{tangents}} == 2
+            && $vtopo->{nodes}->[$i]->{tangents}->[0]->[0] == $vtopo->{nodes}->[$i]->{tangents}->[1]->[0]
+           ) {
+            #print "non-branch maybe needs fixup.\n";
+            # not sure if this a good way to approach this -
+            # doesn't definitively capture all that can go
+            # wrong with non-branch node orientations.
+            $vtopo->{nodes}->[$i]->{color} = 'green';
+            if (defined $vtopo->{nodes}->[$i]->{fixtangents} && @{$vtopo->{nodes}->[$i]->{fixtangents}} == 1) {
+                $vtopo->{nodes}->[$i]->{tangents}->[$vtopo->{nodes}->[$i]->{fixtangents}->[0]] =
+                    [$vtopo->{nodes}->[$i]->{tangents}->[$vtopo->{nodes}->[$i]->{fixtangents}->[0] - 1]->[1],
+                     $vtopo->{nodes}->[$i]->{tangents}->[$vtopo->{nodes}->[$i]->{fixtangents}->[0] - 1]->[0]];
+                }
+            }
         }
     }
 
@@ -1055,10 +1270,10 @@ sub line_line_intersection {
     }
 
 sub to_svg {
-    my $triios = shift;
-    my $fn = shift;
-    my $dispsize = shift;
     my %spec = @_;
+    my $triios = [delete $spec{topo} // undef, delete $spec{vtopo} // undef];
+    my $fn = delete $spec{file} // '-';
+    my $dispsize = delete $spec{size} // [800, 600]; #/
     my $triio = $triios->[0];
     my $vorio = @{$triios}?$triios->[1]:undef;
     my @edges;
@@ -1116,9 +1331,7 @@ sub to_svg {
     
     # used to scale lines and point circle radii
     # so they stay visible in different viewports dimensions
-    # also, * 0.95 to leave some margin
     my $scale=(sqrt($dispsizex**2+$dispsizey**2))/sqrt(($maxx-$minx)**2+($maxy-$miny)**2);
-    #$scale=1;
 
     foreach (@pts,@vpts) {
         $_->[0]->[0] -= $minx;
@@ -1136,14 +1349,14 @@ sub to_svg {
         if ($spec{edges})    {push @edges, map {[$_,@{$spec{edges}}]}    map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{edges}};}
         if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{segments}};}
         #ignoring any subparametric points for elements
-        if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0])], @{$triio->{elements}};}
+        if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0]), $spec{elements}->[1] // ''], @{$triio->{elements}};} #/
         }
     else {
         if ($spec{edges})    {push @edges, map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{edges}}]}    ltolol(2,$triio->edgelist);}
         if ($spec{segments}) {push @segs,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{segments}}]} ltolol(2,$triio->segmentlist);}
         #ignoring any subparametric points for elements
         if ($spec{elements}) {
-            push @elements,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0],$pts[$_->[2]]->[0]],$spec{elements}->[0]]} ltolol($triio->numberofcorners,$triio->trianglelist);
+            push @elements,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0],$pts[$_->[2]]->[0]],$spec{elements}->[0],$spec{elements}->[1] // '']} ltolol($triio->numberofcorners,$triio->trianglelist); #/
             #read triangle attribute list, so at least those are available for choosing fill color in this case
             if (ref($spec{elements}->[0]) =~ /CODE/ && $triio->numberoftriangleattributes > 0 && $triio->numberofregions > 0) {
                 my @eleattrs = ltolol($triio->numberoftriangleattributes,$triio->triangleattributes);
@@ -1174,7 +1387,9 @@ sub to_svg {
                                    ]
                                    } @{$vorio->{nodes}};
                 }
-            @vedges = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],$vpts[$_->{nodes}->[1]->{index}]->[0]],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
+            if ($spec{vedges}) {
+                @vedges = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],$vpts[$_->{nodes}->[1]->{index}]->[0]],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
+                }
             if (defined $spec{vrays}) {
                 @vrays  = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],[@{$_->{vector}}]],(defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
                 foreach my $ray (@vrays) {
@@ -1218,12 +1433,14 @@ sub to_svg {
     my $margin_y_hi = 5;
     my $margin_y_lo = 5;
 
-    if (defined $spec{circles}) {
-        my $cir_maxx = $circles[0]->[0]->[0] + $circles[0]->[0]->[2];
-        my $cir_maxy = $circles[0]->[0]->[1] + $circles[0]->[0]->[2];
-        my $cir_minx = $circles[0]->[0]->[0] - $circles[0]->[0]->[2];
-        my $cir_miny = $circles[0]->[0]->[1] - $circles[0]->[0]->[2];
-        foreach my $cir (@circles) {
+    # extend margins to account for the radius of any circles or points
+    my @round_things = (@circles, (map {[[$_->[0]->[0], $_->[0]->[1], $_->[2]]]} ( ($spec{nodes} ? @pts : () ), ($spec{vnodes} ? @vpts : () ))));
+    if (scalar(@round_things) > 0) {
+        my $cir_maxx = $round_things[0]->[0]->[0] + $round_things[0]->[0]->[2];
+        my $cir_maxy = $round_things[0]->[0]->[1] + $round_things[0]->[0]->[2];
+        my $cir_minx = $round_things[0]->[0]->[0] - $round_things[0]->[0]->[2];
+        my $cir_miny = $round_things[0]->[0]->[1] - $round_things[0]->[0]->[2];
+        foreach my $cir (@round_things) {
             if ($cir_maxx < $cir->[0]->[0] + $cir->[0]->[2]) {$cir_maxx = $cir->[0]->[0] + $cir->[0]->[2]}
             if ($cir_maxy < $cir->[0]->[1] + $cir->[0]->[2]) {$cir_maxy = $cir->[0]->[1] + $cir->[0]->[2]}
             if ($cir_minx > $cir->[0]->[0] - $cir->[0]->[2]) {$cir_minx = $cir->[0]->[0] - $cir->[0]->[2]}
@@ -1235,7 +1452,7 @@ sub to_svg {
         if ($scaled_miny-$cir_miny > $margin_y_lo) {$margin_y_lo = ($scaled_miny - $cir_miny) + 5;}
         }
 
-    open(SVGO,'>',$fn);
+    open(SVGO,'>'.$fn);
     print SVGO sprintf <<"EOS", $dispsizex, $dispsizey, -$margin_x_lo, -$margin_y_hi, $scaled_maxx + ($margin_x_lo + $margin_x_hi), $scaled_maxy + ($margin_y_lo + $margin_y_hi), $scaled_maxy;
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">
@@ -1292,6 +1509,11 @@ EOS
     }
 
 sub dist2d {sqrt(($_[0]->[0]-$_[1]->[0])**2+($_[0]->[1]-$_[1]->[1])**2)}
+
+sub counterclockwise {
+    my ($pa, $pb, $pc) = @_;
+    return _counterclockwise($pa->[0],$pa->[1],$pb->[0],$pb->[1],$pc->[0],$pc->[1]);
+    }
 
 =head1 NAME
 
@@ -1365,8 +1587,10 @@ Version 0.10
     my $point_set = [ [1,1], [7,1], [7,3],
                       [3,3], [3,5], [1,5] ];
 
-    my $tri = new Math::Geometery::Delaunay('ev');
+    my $tri = new Math::Geometry::Delaunay();
     $tri->addPoints($point_set);
+    $tri->doEdges(1);
+    $tri->doVoronoi(1);
     
     # called in void context
     $tri->triangulate();
@@ -1573,9 +1797,10 @@ Version 0.10
     # quality mesh of a planar straight line graph
     # with cross-referenced topological output
 
-    my $tri = new Math::Geometery::Delaunay('e');
+    my $tri = new Math::Geometry::Delaunay();
     $tri->addPolygon($point_set);
     $tri->minimum_angle(23);
+    $tri->doEdges(1);
 
     # called in scalar context
     my $mesh_topology = $tri->triangulate(TRI_CCDT);
@@ -1631,29 +1856,28 @@ L<http://www.cs.cmu.edu/~quake/triangle.defs.html>
 
 =head2 new
 
-The constructor returns a Math::Geometry::Delaunay object, and optionally takes 
-a string, or list of strings, comprised of switches corresponding to Triangle's 
-command line switches, documented here: 
-L<http://www.cs.cmu.edu/~quake/triangle.switch.html>
+The constructor returns a Math::Geometry::Delaunay object.
 
     my $tri = Math::Geometry::Delaunay->new();
-
-    my $tri = Math::Geometry::Delaunay->new('pzq0eQ');
-
-    my $tri = Math::Geometry::Delaunay->new(TRI_CCDT, 'q15', 'a3.5');
-
-
-Options set by switches passed to C<new()> may be overridden later by the 
-corresponding option-setting methods, any time before C<triangulate()> 
-is invoked.
 
 =head1 MESH GENERATION
 
 =head2 triangulate
 
-Run the triangulation and either populate the object's output lists, or return 
-a hash reference giving access to a cross-referenced representation of the mesh 
-topology.
+Run the triangulation with specified options, and either populate the object's
+output lists, or return a hash reference giving access to a cross-referenced 
+representation of the mesh topology.
+
+Common options can be set prior to calling C<triangulate>. The full range of 
+Triangle's options can also be passed to C<triangulate> as a string, or list 
+of strings. For example:
+
+    my $tri = Math::Geometry::Delaunay->new('pzq0eQ');
+
+    my $tri = Math::Geometry::Delaunay->new(TRI_CCDT, 'q15', 'a3.5');
+
+Triangle's command line switches are documented here: 
+L<http://www.cs.cmu.edu/~quake/triangle.switch.html>
 
 =head3 list output
 
@@ -2030,12 +2254,15 @@ a direction vector for the ray.
 
 This function is meant as a development and debugging aid, to "dump" the
 geometric data structures specific to this package to a graphical
-representation. Takes an array ref, containing one or two topology hashes,
-as returned by C<triangulate>, a file name string, and then key-value pairs
-with keys corresponding to output lists, and values consisting of references to
-arrays containing style configuration. If two topology hashes are contained in
-the first array ref argument, the second is assumed to represent a Voronoi
-diagram.
+representation. Takes key-value pairs to specify topology hashes, output file,
+image dimensions, and styles for the elements in the various output lists.
+
+The topology hash input for the C<topo> or C<vtopo> keys is just the hash
+returned by C<triangulate>. The value for the C<file> key is a file name string.
+Omit C<file> to print to STDOUT. For C<size>, provide and array ref with width
+and height, in pixels. For output list styles, keys correspond to the output 
+list names, and values consist of references to arrays containing style 
+configurations, as demonstrated below.
 
 Only geometry that has a style configuration will be displayed. The following
 example includes everything. To display a subset, just omit any of the style
@@ -2043,19 +2270,21 @@ configuration key-value pairs.
 
     ($topo, $vtopo) = $tri->triangulate('ve');
 
-    to_svg( [$topo, $vtopo],
+    to_svg( topo  => $topo,
+            vtopo => $vtopo,
             
-            "enchilada.svg",
+            file => "enchilada.svg",    # omit for STDOUT
+            size => [800, 600],         # width, height in pixels
             
             #                     line width or   optional
             #         svg color   point radius    extra CSS
             
             nodes    => ['black'  ,   0.3],
             edges    => ['#CCCCCC',   0.7],
-            segments => ['blue'   ,   0.9,     'stroke-dasharray="1,1"'],
-            elements => ['pink']  , # string or function reference
+            segments => ['blue'   ,   0.9,     'stroke-dasharray:1 1;'],
+            elements => ['pink']  , # string or callback; see below
 
-            # these require Voronoi input
+            # these require Voronoi input (vtopo)
 
             vnodes   => ['purple' ,   0.3],
             vedges   => ['#FF0000',   0.7],
@@ -2069,11 +2298,12 @@ the Voronoi diagram. To see the complete Voronoi diagram, including segments
 representing the infinite rays, you should include style configuration for the 
 C<vrays> key, as in the example above.
 
-Elements (triangles) only need one style config entry, for color. In this case
-the entry can also be a reference to a callback function. A reference to the
-triangle being processed for display will be passed to the callback function.
-Therefore the callback function can determine a color based on any features
-or relationships of that triangle.
+Elements (triangles) only need one style config entry, for color. (An optional
+second entry would be a string for additional CSS.) In this case,
+the first entry can also be a reference to a callback function. A reference to 
+the triangle being processed for display will be passed to the callback 
+function. Therefore the callback function can determine a color based on any 
+features or relationships of that triangle.
 
 Typically you might color each triangle according to the region it's in, by
 using Triangle's 'A' switch, and then reading the region attribute from the
@@ -2362,7 +2592,7 @@ and a place for paths to intersect.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2012 Micheal E. Sheldrake.
+Copyright 2013 Micheal E. Sheldrake.
 
 This Perl binding to Triangle is free software; 
 you can redistribute it and/or modify it under the terms of either: 

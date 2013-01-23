@@ -53,6 +53,60 @@ intArray * intArrayPtr( int nelem ) {
     return array;
     }
 
+/* ccw test with adaptive exact fallback, adapted from        */
+/* Triangle's version (removed mesh and behavior params)      */
+/* "The result is also a rough approximation of twice the     */
+/*  signed area of the triangle defined by the three points." */
+
+typedef double * vertex;
+
+/* Global constants.                                                         */
+
+REAL splitter;       /* Used to split REAL factors for exact multiplication. */
+REAL epsilon;                             /* Floating-point machine epsilon. */
+REAL resulterrbound;
+REAL ccwerrboundA, ccwerrboundB, ccwerrboundC;
+REAL iccerrboundA, iccerrboundB, iccerrboundC;
+REAL o3derrboundA, o3derrboundB, o3derrboundC;
+
+double mgdcounterclockwise(vertex pa, vertex pb, vertex pc) {
+  REAL detleft, detright, det;
+  REAL detsum, errbound;
+  XPFPA_DECLARE()
+
+  detleft = (pa[0] - pc[0]) * (pb[1] - pc[1]);
+  detright = (pa[1] - pc[1]) * (pb[0] - pc[0]);
+  det = detleft - detright;
+
+  if (detleft > 0.0) {
+    if (detright <= 0.0) {
+      return det;
+    } else {
+      detsum = detleft + detright;
+    }
+  } else if (detleft < 0.0) {
+    if (detright >= 0.0) {
+      return det;
+    } else {
+      detsum = -detleft - detright;
+    }
+  } else {
+    return det;
+  }
+
+  errbound = ccwerrboundA * detsum;
+  if ((det >= errbound) || (-det >= errbound)) {
+    return det;
+  }
+
+  XPFPA_SWITCH_DOUBLE()
+  det = counterclockwiseadapt(pa, pb, pc, detsum);
+  XPFPA_RESTORE()
+
+  return det;
+}
+
+
 /* TODO: */
 /* Consider offering the -u option, the "user defined constraint" function feature.   */
 /* Define a C function that calls a Perl function stub to be overidden. See perlcall. */
@@ -60,6 +114,15 @@ intArray * intArrayPtr( int nelem ) {
 
 MODULE = Math::Geometry::Delaunay	PACKAGE = Math::Geometry::Delaunay	
 PROTOTYPES: DISABLE
+
+void
+exactinit()
+    PREINIT:
+      XPFPA_DECLARE() /* declares vars to stash the floating point config */
+    CODE:
+      XPFPA_SWITCH_DOUBLE()
+      exactinit();
+      XPFPA_RESTORE()
 
 void
 _triangulate(arg0, arg1, arg2, arg3)
@@ -97,6 +160,20 @@ _triangulate(arg0, arg1, arg2, arg3)
               Copy(arg1->regionlist, arg3->regionlist , arg1->numberofregions * (2 + arg1->numberoftriangleattributes), double);
               }
           }
+
+double
+_counterclockwise(double pax, double pay, double pbx, double pby, double pcx, double pcy)
+    PREINIT:
+        double pa[2];
+        double pb[2];
+        double pc[2];
+    CODE:
+        pa[0] = pax; pa[1] = pay;
+        pb[0] = pbx; pb[1] = pby;
+        pc[0] = pcx; pc[1] = pcy;
+        RETVAL = mgdcounterclockwise(pa, pb, pc);
+    OUTPUT: 
+        RETVAL
 
 MODULE=Math::Geometry::Delaunay      PACKAGE=Math::Geometry::Delaunay::Triangulateio      PREFIX=triio_
 PROTOTYPES: DISABLE
