@@ -15,6 +15,7 @@ t/02-delaunays.t
 t/03-delaunays_pslg.t
 t/04-topology.t
 t/05-lists.t
+t/06-addsegs.t
 
 META.yml
 META.json

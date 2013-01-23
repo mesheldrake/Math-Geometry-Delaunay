@@ -1,5 +1,29 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.11 Wednesday Jan 23 12:20:00 2013
+
+  - Triangle option strings can no longer be used in the 
+    new() constructor. They may instead be passed to the
+    triangulate() method.
+
+  - Changed all args for to_svg() to be key=>value style, 
+    and added image dimension option.
+
+  - The to_svg() utility will now print to STDOUT if no file 
+    name is specified.
+
+  - The mic_adjust() utility now adds a list of tangent point 
+    pairs to the nodes it processes - one pair for each edge
+    emanating from the node.
+
+  - Got addSegments() working.
+
+  - Fixed some failures and improved automatic generation of 
+    polygon hole identification points.
+
+  - Improved auto margin detection for to_svg(), to avoid clipping 
+    node circles at edges of display.
+
 0.10 Wednesday Dec 19 07:36:00 2012
 
   - The floating point unit config done by Triangle under Linux could
