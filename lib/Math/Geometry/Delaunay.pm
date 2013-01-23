@@ -1391,7 +1391,7 @@ sub to_svg {
                 @vedges = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],$vpts[$_->{nodes}->[1]->{index}]->[0]],@{$spec{vedges}}], grep $_->{vector}->[0] eq 0 && $_->{vector}->[1] eq 0, @{$vorio->{edges}};
                 }
             if (defined $spec{vrays}) {
-                @vrays  = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],[@{$_->{vector}}]],(defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
+                @vrays  = map [[$vpts[$_->{nodes}->[0]->{index}]->[0],[@{$_->{vector}}]],(defined($spec{vrays}) ? @{$spec{vrays}} : @{$spec{vedges}})], grep $_->{vector}->[0] ne 0 || $_->{vector}->[1] ne 0, @{$vorio->{edges}};
                 foreach my $ray (@vrays) {
                     $ray->[0]->[1]->[0] *= $scale;
                     $ray->[0]->[1]->[1] *= $scale;
@@ -1416,7 +1416,7 @@ sub to_svg {
                         $vec = [$vec->[0]/$h,$vec->[1]/$h];
                         push @vrays, [
                             [$basept,[$basept->[0]+$vec->[0]*$maxx,$basept->[1]+$vec->[1]*$maxx]],
-                            (defined(@{$spec{vrays}}) ? @{$spec{vrays}} : @{$spec{vedges}})];
+                            (defined($spec{vrays}) ? @{$spec{vrays}} : @{$spec{vedges}})];
                         }
                     }
                 }
