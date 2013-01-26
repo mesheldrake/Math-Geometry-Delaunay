@@ -245,8 +245,9 @@ sub prepPoly {
                 $self->{segptrefs}->{$seg->[0]} = $#allpts;
                 $self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]} = $#allpts;
                 }
-            push @allsegs, $self->{segptrefs}->{$seg->[0]}
-                           // $self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]}; #/
+            push @allsegs, defined($self->{segptrefs}->{$seg->[0]})
+                           ? $self->{segptrefs}->{$seg->[0]}
+                           : $self->{segptrefs}->{$seg->[0]->[0].','.$seg->[0]->[1]};
             if (   !defined($self->{segptrefs}->{$seg->[1]}) 
                 && !defined($self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]})
                 ) {
@@ -254,8 +255,9 @@ sub prepPoly {
                 $self->{segptrefs}->{$seg->[1]} = $#allpts;
                 $self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]} = $#allpts;
                 }
-            push @allsegs, $self->{segptrefs}->{$seg->[1]}
-                           // $self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]}; #/            
+            push @allsegs, defined($self->{segptrefs}->{$seg->[1]})
+                           ? $self->{segptrefs}->{$seg->[1]}
+                           : $self->{segptrefs}->{$seg->[1]->[0].','.$seg->[1]->[1]};
             }
         }
     $self->{segptrefs} = {};
@@ -1271,9 +1273,9 @@ sub line_line_intersection {
 
 sub to_svg {
     my %spec = @_;
-    my $triios = [delete $spec{topo} // undef, delete $spec{vtopo} // undef];
-    my $fn = delete $spec{file} // '-';
-    my $dispsize = delete $spec{size} // [800, 600]; #/
+    my $triios = [defined($spec{topo}) ? delete $spec{topo} : undef, defined($spec{vtopo}) ? delete $spec{vtopo} : undef];
+    my $fn = defined($spec{file}) ? delete $spec{file} : '-';
+    my $dispsize = defined($spec{size}) ? delete $spec{size} : [800, 600];
     my $triio = $triios->[0];
     my $vorio = @{$triios}?$triios->[1]:undef;
     my @edges;
@@ -1349,14 +1351,14 @@ sub to_svg {
         if ($spec{edges})    {push @edges, map {[$_,@{$spec{edges}}]}    map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{edges}};}
         if ($spec{segments}) {push @segs,  map {[$_,@{$spec{segments}}]} map [$pts[$_->{nodes}->[0]->{index}]->[0],$pts[$_->{nodes}->[1]->{index}]->[0]], @{$triio->{segments}};}
         #ignoring any subparametric points for elements
-        if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0]), $spec{elements}->[1] // ''], @{$triio->{elements}};} #/
+        if ($spec{elements}) {push @elements,  map [[map $pts[$_->{index}]->[0], @{$_->{nodes}}[0..2]], (ref($spec{elements}->[0]) =~ /CODE/ ? &{$spec{elements}->[0]}($_) : $spec{elements}->[0]), defined($spec{elements}->[1]) ? $spec{elements}->[1] : ''], @{$triio->{elements}};} #/
         }
     else {
         if ($spec{edges})    {push @edges, map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{edges}}]}    ltolol(2,$triio->edgelist);}
         if ($spec{segments}) {push @segs,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0]],@{$spec{segments}}]} ltolol(2,$triio->segmentlist);}
         #ignoring any subparametric points for elements
         if ($spec{elements}) {
-            push @elements,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0],$pts[$_->[2]]->[0]],$spec{elements}->[0],$spec{elements}->[1] // '']} ltolol($triio->numberofcorners,$triio->trianglelist); #/
+            push @elements,  map {[[$pts[$_->[0]]->[0],$pts[$_->[1]]->[0],$pts[$_->[2]]->[0]],$spec{elements}->[0], defined($spec{elements}->[1]) ? $spec{elements}->[1] : '']} ltolol($triio->numberofcorners,$triio->trianglelist); #/
             #read triangle attribute list, so at least those are available for choosing fill color in this case
             if (ref($spec{elements}->[0]) =~ /CODE/ && $triio->numberoftriangleattributes > 0 && $triio->numberofregions > 0) {
                 my @eleattrs = ltolol($triio->numberoftriangleattributes,$triio->triangleattributes);
