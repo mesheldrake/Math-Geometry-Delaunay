@@ -60,14 +60,8 @@ intArray * intArrayPtr( int nelem ) {
 
 typedef double * vertex;
 
-/* Global constants.                                                         */
-
-REAL splitter;       /* Used to split REAL factors for exact multiplication. */
-REAL epsilon;                             /* Floating-point machine epsilon. */
-REAL resulterrbound;
-REAL ccwerrboundA, ccwerrboundB, ccwerrboundC;
-REAL iccerrboundA, iccerrboundB, iccerrboundC;
-REAL o3derrboundA, o3derrboundB, o3derrboundC;
+/* A global defined in triangle.c */
+extern REAL ccwerrboundA;
 
 double mgdcounterclockwise(vertex pa, vertex pb, vertex pc) {
   REAL detleft, detright, det;
