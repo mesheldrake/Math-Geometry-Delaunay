@@ -58,17 +58,18 @@ my $builder = Module::Build->new(
 
 my $compiler = ExtUtils::CppGuess->new();
 
+if (($compiler->is_msvc || $^O =~ /MSWin/i) && $builder->config('archname') =~ /-x64/) {
+    # Win64 version uses "unsigned long long" instead of "unsigned long"
+    # to store and manipulate 64 bit pointers.
+    $builder->c_source->[0] .= '_Win64';
+    }
+
 if ($compiler->is_msvc) {
     push @{$builder->extra_compiler_flags()}, "-DCPU86";
     }
 else {
-    if ($^O =~ /MSWin32/i && $compiler->is_gcc) { # MinGW
+    if ($^O =~ /MSWin/i && $compiler->is_gcc) { # MinGW
         push @{$builder->extra_compiler_flags()}, "-DCPU86", "-DHAVE__CONTROLFP";
-        if ($builder->config('archname') =~ /-x64/) {
-            # this should set the size of long to 64 bits
-            # so it matches pointer size, which Triangle assumes
-            push @{$builder->extra_compiler_flags()}, "-m64";
-            }
         }
     elsif ($^O =~ /cygwin/) {
         # Use SSE2, which doesn't use extended precision doubles,
