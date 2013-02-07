@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.14 Wednesday Feb 06 21:52:00 2013
+
+  - Fixed search-replace mistakes in new Win64 copy of triangle.c.
+
 0.13 Wednesday Feb 06 17:58:00 2013
 
   - Separate Windows 64 bit version of triangle.c that uses
