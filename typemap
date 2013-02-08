@@ -21,14 +21,18 @@ ANY_OBJECT
     $var = ($type) SvIV((SV*)SvRV($arg));
 
 T_ARRAY
-    /* modified TYPEMAP INPUT FOR T_ARRAY */
-    /* always skips first item on stack ST(0), which is our object reference. */
-    /* Allows array getter/setter to be called like obj->getset() */
-    /* Array members read as doubles, then cast to type set up in a define like this: */
-    /* #define intArrayPtrContains int */
-    /* so it should work with doubles and the largest ints that fit in your doubles. */
-    /* The largest int that fits in double limit is then */
-    /* the limit for number of points or edges in a trianglulation */
+    /**************************************************************************/
+    /* Modified TYPEMAP INPUT FOR T_ARRAY                                     */
+    /* This always skips the first item on the stack, ST(0), which is our     */
+    /* object reference. This allows the array getter/setter to be called     */
+    /* like obj->getset().                                                    */
+    /* Array members are read as doubles, then cast to the type set up in a   */
+    /* define like this:                                                      */
+    /* #define intArrayPtrContains int                                        */
+    /* So it should work with doubles and the largest ints that fit in your   */
+    /* doubles. The largest int that fits in a double is then the limit for   */
+    /* the number of points or edges in a triangulation.                      */
+    /**************************************************************************/
     U32 ix_$var = $argoff + 1;
     items--;
     if (items>0) {
