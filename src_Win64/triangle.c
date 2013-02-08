@@ -959,16 +959,16 @@ int minus1mod3[3] = {2, 0, 1};
 /*   extracted from the two least significant bits of the pointer.           */
 
 #define decode(ptr, otri)                                                     \
-  (otri).orient = (int) ((unsigned long long) (ptr) & (unsigned long) 3l);         \
+  (otri).orient = (int) ((unsigned long long) (ptr) & (unsigned long long) 3ll);         \
   (otri).tri = (triangle *)                                                   \
-                  ((unsigned long long) (ptr) ^ (unsigned long) (otri).orient)
+                  ((unsigned long long) (ptr) ^ (unsigned long long) (otri).orient)
 
 /* encode() compresses an oriented triangle into a single pointer.  It       */
 /*   relies on the assumption that all triangles are aligned to four-byte    */
 /*   boundaries, so the two least significant bits of (otri).tri are zero.   */
 
 #define encode(otri)                                                          \
-  (triangle) ((unsigned long long) (otri).tri | (unsigned long) (otri).orient)
+  (triangle) ((unsigned long long) (otri).tri | (unsigned long long) (otri).orient)
 
 /* The following handle manipulation primitives are all described by Guibas  */
 /*   and Stolfi.  However, Guibas and Stolfi use an edge-based data          */
@@ -1132,16 +1132,16 @@ int minus1mod3[3] = {2, 0, 1};
 
 #define infect(otri)                                                          \
   (otri).tri[6] = (triangle)                                                  \
-                    ((unsigned long long) (otri).tri[6] | (unsigned long) 2l)
+                    ((unsigned long long) (otri).tri[6] | (unsigned long long) 2ll)
 
 #define uninfect(otri)                                                        \
   (otri).tri[6] = (triangle)                                                  \
-                    ((unsigned long long) (otri).tri[6] & ~ (unsigned long) 2l)
+                    ((unsigned long long) (otri).tri[6] & ~ (unsigned long long) 2ll)
 
 /* Test a triangle for viral infection.                                      */
 
 #define infected(otri)                                                        \
-  (((unsigned long long) (otri).tri[6] & (unsigned long) 2l) != 0l)
+  (((unsigned long long) (otri).tri[6] & (unsigned long long) 2ll) != 0ll)
 
 /* Check or set a triangle's attributes.                                     */
 
@@ -1179,16 +1179,16 @@ int minus1mod3[3] = {2, 0, 1};
 /*   are masked out to produce the real pointer.                             */
 
 #define sdecode(sptr, osub)                                                   \
-  (osub).ssorient = (int) ((unsigned long long) (sptr) & (unsigned long) 1l);      \
+  (osub).ssorient = (int) ((unsigned long long) (sptr) & (unsigned long long) 1ll);      \
   (osub).ss = (subseg *)                                                      \
-              ((unsigned long long) (sptr) & ~ (unsigned long) 3l)
+              ((unsigned long long) (sptr) & ~ (unsigned long long) 3ll)
 
 /* sencode() compresses an oriented subsegment into a single pointer.  It    */
 /*   relies on the assumption that all subsegments are aligned to two-byte   */
 /*   boundaries, so the least significant bit of (osub).ss is zero.          */
 
 #define sencode(osub)                                                         \
-  (subseg) ((unsigned long long) (osub).ss | (unsigned long) (osub).ssorient)
+  (subseg) ((unsigned long long) (osub).ss | (unsigned long long) (osub).ssorient)
 
 /* ssym() toggles the orientation of a subsegment.                           */
 
@@ -3696,27 +3696,27 @@ struct otri *t;
   struct osub printsh;
   vertex printvertex;
 
-  printf("triangle x%llx with orientation %d:\n", (unsigned long) t->tri,
+  printf("triangle x%llx with orientation %d:\n", (unsigned long long) t->tri,
          t->orient);
   decode(t->tri[0], printtri);
   if (printtri.tri == m->dummytri) {
     printf("    [0] = Outer space\n");
   } else {
-    printf("    [0] = x%llx  %d\n", (unsigned long) printtri.tri,
+    printf("    [0] = x%llx  %d\n", (unsigned long long) printtri.tri,
            printtri.orient);
   }
   decode(t->tri[1], printtri);
   if (printtri.tri == m->dummytri) {
     printf("    [1] = Outer space\n");
   } else {
-    printf("    [1] = x%llx  %d\n", (unsigned long) printtri.tri,
+    printf("    [1] = x%llx  %d\n", (unsigned long long) printtri.tri,
            printtri.orient);
   }
   decode(t->tri[2], printtri);
   if (printtri.tri == m->dummytri) {
     printf("    [2] = Outer space\n");
   } else {
-    printf("    [2] = x%llx  %d\n", (unsigned long) printtri.tri,
+    printf("    [2] = x%llx  %d\n", (unsigned long long) printtri.tri,
            printtri.orient);
   }
 
@@ -3745,17 +3745,17 @@ struct otri *t;
   if (b->usesegments) {
     sdecode(t->tri[6], printsh);
     if (printsh.ss != m->dummysub) {
-      printf("    [6] = x%llx  %d\n", (unsigned long) printsh.ss,
+      printf("    [6] = x%llx  %d\n", (unsigned long long) printsh.ss,
              printsh.ssorient);
     }
     sdecode(t->tri[7], printsh);
     if (printsh.ss != m->dummysub) {
-      printf("    [7] = x%llx  %d\n", (unsigned long) printsh.ss,
+      printf("    [7] = x%llx  %d\n", (unsigned long long) printsh.ss,
              printsh.ssorient);
     }
     sdecode(t->tri[8], printsh);
     if (printsh.ss != m->dummysub) {
-      printf("    [8] = x%llx  %d\n", (unsigned long) printsh.ss,
+      printf("    [8] = x%llx  %d\n", (unsigned long long) printsh.ss,
              printsh.ssorient);
     }
   }
@@ -3796,14 +3796,14 @@ struct osub *s;
   if (printsh.ss == m->dummysub) {
     printf("    [0] = No subsegment\n");
   } else {
-    printf("    [0] = x%llx  %d\n", (unsigned long) printsh.ss,
+    printf("    [0] = x%llx  %d\n", (unsigned long long) printsh.ss,
            printsh.ssorient);
   }
   sdecode(s->ss[1], printsh);
   if (printsh.ss == m->dummysub) {
     printf("    [1] = No subsegment\n");
   } else {
-    printf("    [1] = x%llx  %d\n", (unsigned long) printsh.ss,
+    printf("    [1] = x%llx  %d\n", (unsigned long long) printsh.ss,
            printsh.ssorient);
   }
 
@@ -3826,14 +3826,14 @@ struct osub *s;
   if (printtri.tri == m->dummytri) {
     printf("    [6] = Outer space\n");
   } else {
-    printf("    [6] = x%llx  %d\n", (unsigned long) printtri.tri,
+    printf("    [6] = x%llx  %d\n", (unsigned long long) printtri.tri,
            printtri.orient);
   }
   decode(s->ss[7], printtri);
   if (printtri.tri == m->dummytri) {
     printf("    [7] = Outer space\n");
   } else {
-    printf("    [7] = x%llx  %d\n", (unsigned long) printtri.tri,
+    printf("    [7] = x%llx  %d\n", (unsigned long long) printtri.tri,
            printtri.orient);
   }
 
