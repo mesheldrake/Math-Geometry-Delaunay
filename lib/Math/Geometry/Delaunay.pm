@@ -65,6 +65,15 @@ sub new {
     return $self;
     }
 
+sub reset {
+    my $self = shift;
+    # clear input
+    $self->{poly}->{$_} = [] for qw(regions holes polylines points segments);
+    $self->{poly}->{segptrefs} = {};
+    # clear any previous output
+    $self->{poly}->{$_} = [] for qw(outnodes voutnodes);
+    }
+
 # triangulatio interfaces
 sub in     {return $_[0]->{in};}
 sub out    {return $_[0]->{out};}
@@ -319,9 +328,13 @@ sub prepPoly {
             map {@{$_}[2 .. $coords_plus_attrs - 1]} (@allpts, @{$self->{poly}->{points}}));
         }
 
+    # discard intermediate data now that it's been loaded into C arrays
+    $self->reset();
+
     # set up new triangulateio C structs to receive output
-    $self->{out}    = new Math::Geometry::Delaunay::Triangulateio;
-    $self->{vorout} = new Math::Geometry::Delaunay::Triangulateio;
+    $self->{out}    = Math::Geometry::Delaunay::Triangulateio->new();
+    $self->{vorout} = Math::Geometry::Delaunay::Triangulateio->new();
+
     return;
     }
 
