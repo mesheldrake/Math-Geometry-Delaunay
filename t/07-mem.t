@@ -17,7 +17,7 @@ SKIP: {
 
 eval('require Devel::Size');
 diag('skip unless Devel::Size installed') if $@;
-skip 'skip memory leak test', ($loops * 6) if $@;
+skip 'skip memory leak test', ((($loops - 1) * 5) + 4) if $@;
 
 my $size = 0;
 my $prevsize = 0;
