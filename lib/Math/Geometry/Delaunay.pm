@@ -730,8 +730,6 @@ sub mic_adjust {
     my @new_vnode_radii;  # will be calculated and added to node data
     my @new_vnode_tangents;  # where the MIC touches the boundary PSLG
 
-    my $dsioff=scalar(@{$topo->{nodes}});
-
     my $vnc=-1; # will use to look up triangle that corresponds to the voronoi node
     # $vnc can probably be replaced with $vnode->{index}
 
