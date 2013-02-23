@@ -19,6 +19,8 @@
 /* "fool dumb compilers" but void looks like it's     */
 /* more portable.                                     */
 /* We also set REAL in the Build.PL compiler flags.   */
+/* VOID should probably also be set to void directly  */
+/* in triangle.c.                                     */
 
 #define REAL double
 #define VOID void
@@ -27,8 +29,8 @@
 
 /* these let us refer to the struct in triangle.h    */
 
-typedef struct triangulateio *Math__Geometry__Delaunay__TriangulateioPtr;
-typedef struct triangulateio  Math__Geometry__Delaunay__Triangulateio;
+typedef struct triangulateio * Math__Geometry__Delaunay__TriangulateioPtr;
+typedef struct triangulateio   Math__Geometry__Delaunay__Triangulateio;
 
 /* for T_ARRAY typmap */
 
@@ -109,7 +111,7 @@ double mgdcounterclockwise(vertex pa, vertex pb, vertex pc) {
 MODULE = Math::Geometry::Delaunay	PACKAGE = Math::Geometry::Delaunay	
 PROTOTYPES: DISABLE
 
-void
+SV *
 exactinit()
     PREINIT:
       XPFPA_DECLARE() /* declares vars to stash the floating point config */
@@ -118,7 +120,7 @@ exactinit()
       exactinit();
       XPFPA_RESTORE()
 
-void
+SV *
 _triangulate(arg0, arg1, arg2, arg3)
     char * arg0
     Math::Geometry::Delaunay::TriangulateioPtr	arg1
@@ -211,9 +213,8 @@ triio_new(char * CLASS)
 # getter/setter for all the "number of" members of the triangulateio struct
 
 int
-numberof(THIS, newval = 0)
-    Math::Geometry::Delaunay::Triangulateio THIS
-    int newval
+numberof(SV * THIS, int newval = 0)
+#numberof(Math::Geometry::Delaunay::Triangulateio THIS, int newval = 0)
     PROTOTYPE: DISABLE
     ALIAS:
         numberofpoints             = 1
@@ -228,12 +229,11 @@ numberof(THIS, newval = 0)
     PREINIT:
         struct triangulateio * p;
         STRLEN len;
-        char *s;
     CODE:
-        if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        s = SvPV((SV*)SvRV(ST(0)), len);
-        if (len != sizeof(THIS)) {croak("Size %d of packed data != expected %d", len, sizeof(THIS));}
-        p = (struct triangulateio *) s;
+        if (!sv_derived_from(THIS, "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
+        if (SvCUR(SvRV(THIS)) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(THIS)), sizeof(*p)); }
+        p = (struct triangulateio *) SvPV((SV*)SvRV(THIS), len);
+        
         switch (ix) {
             case 1 : if ( items > 1 ) {p->numberofpoints             = newval;} RETVAL = p->numberofpoints; break;
             case 2 : if ( items > 1 ) {p->numberofpointattributes    = newval;} RETVAL = p->numberofpointattributes; break;
@@ -280,41 +280,42 @@ doubleList(doubleArray * array, ... )
         regionlist            = 6
         normlist              = 7
     PREINIT:
-        U32 size_RETVAL;
+        IV size_RETVAL;
         struct triangulateio * p;
         STRLEN len;
-        char *s;
         int orig_items_cnt = (int) items;
     CODE:
-        s = SvPV((SV*)SvRV(ST(0)), len);
-        p = (struct triangulateio *) s;
+        if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
+
         /* setter */
         if (orig_items_cnt > 1) {
           switch (ix) {
-              case 1 :  if (p->pointlist)             {trifree(p->pointlist);}             p->pointlist             = array ; p->numberofpoints  = (int) (ix_array)/2; break;
+              case 1 :  if (p->pointlist)             {trifree(p->pointlist);}             p->pointlist             = array ; p->numberofpoints  = ix_array/2; break;
               case 2 :  if (p->pointattributelist)    {trifree(p->pointattributelist);}    p->pointattributelist    = array ; break;
               case 3 :  if (p->triangleattributelist) {trifree(p->triangleattributelist);} p->triangleattributelist = array ; break;
               case 4 :  if (p->trianglearealist)      {trifree(p->trianglearealist);}      p->trianglearealist      = array ; break;
-              case 5 :  if (p->holelist)              {trifree(p->holelist);}              p->holelist              = array ; p->numberofholes   = (int) (ix_array)/2; break;
-              case 6 :  if (p->regionlist)            {trifree(p->regionlist);}            p->regionlist            = array ; p->numberofregions = (int) (ix_array)/2; break;
+              case 5 :  if (p->holelist)              {trifree(p->holelist);}              p->holelist              = array ; p->numberofholes   = ix_array/2; break;
+              case 6 :  if (p->regionlist)            {trifree(p->regionlist);}            p->regionlist            = array ; p->numberofregions = ix_array/2; break;
               case 7 :  if (p->normlist)              {trifree(p->normlist);}              p->normlist              = array ; break;
               }
           /* return count of how many items added */
           ST(0) = sv_newmortal();
-          sv_setnv(ST(0), (double)(ix_array));
+          sv_setnv(ST(0), (double) ix_array);
           XSRETURN(1);
           }
         /* getter */
         else {
           switch (ix) {
-              case 1 : RETVAL = p->pointlist;             size_RETVAL = (U32) p->numberofpoints*2; break;
-              case 2 : RETVAL = p->pointattributelist;    size_RETVAL = (U32) p->numberofpoints*p->numberofpointattributes; break;
-              case 3 : RETVAL = p->triangleattributelist; size_RETVAL = (U32) p->numberoftriangles*p->numberoftriangleattributes; break;
-              case 4 : RETVAL = p->trianglearealist;      size_RETVAL = (U32) p->numberoftriangles; break;
-              case 5 : RETVAL = p->holelist;              size_RETVAL = (U32) p->numberofholes*2; break;
-              case 6 : RETVAL = p->regionlist;            size_RETVAL = (U32) p->numberofregions*p->numberoftriangleattributes; break;
-              case 7 : RETVAL = p->normlist;              size_RETVAL = (U32) p->numberofedges*2; break;
-              default: RETVAL = (double *) NULL;          size_RETVAL = (U32) 0;
+              case 1 : RETVAL = p->pointlist;             size_RETVAL = p->numberofpoints*2; break;
+              case 2 : RETVAL = p->pointattributelist;    size_RETVAL = p->numberofpoints*p->numberofpointattributes; break;
+              case 3 : RETVAL = p->triangleattributelist; size_RETVAL = p->numberoftriangles*p->numberoftriangleattributes; break;
+              case 4 : RETVAL = p->trianglearealist;      size_RETVAL = p->numberoftriangles; break;
+              case 5 : RETVAL = p->holelist;              size_RETVAL = p->numberofholes*2; break;
+              case 6 : RETVAL = p->regionlist;            size_RETVAL = p->numberofregions*p->numberoftriangleattributes; break;
+              case 7 : RETVAL = p->normlist;              size_RETVAL = p->numberofedges*2; break;
+              default: RETVAL = (double *) NULL;          size_RETVAL = 0;
               }
           }
     OUTPUT: 
@@ -335,28 +336,28 @@ intList( intArray * array, ... )
         edgelist            = 6
         edgemarkerlist      = 7
     PREINIT:
-        U32 size_RETVAL;
+        IV size_RETVAL;
         struct triangulateio * p;
         STRLEN len;
-        char *s;
         int orig_items_cnt = (int) items;
     CODE:
-        s = SvPV((SV*)SvRV(ST(0)), len);
-        p = (struct triangulateio *) s;
+        if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
         /* setter */
         if (orig_items_cnt > 1) {
             switch (ix) {
                 case 1 :  if (p->pointmarkerlist)   {trifree(p->pointmarkerlist);}   p->pointmarkerlist = array;   break;
-                case 2 :  if (p->trianglelist)      {trifree(p->trianglelist);}      p->trianglelist = array;      p->numberoftriangles = (ix_array)/3; break;
+                case 2 :  if (p->trianglelist)      {trifree(p->trianglelist);}      p->trianglelist = array;      p->numberoftriangles = ix_array/3; break;
                 case 3 :  if (p->neighborlist)      {trifree(p->neighborlist);}      p->neighborlist = array;      break;
-                case 4 :  if (p->segmentlist)       {trifree(p->segmentlist);}       p->segmentlist = array;       p->numberofsegments  = (ix_array)/2; break;
+                case 4 :  if (p->segmentlist)       {trifree(p->segmentlist);}       p->segmentlist = array;       p->numberofsegments  = ix_array/2; break;
                 case 5 :  if (p->segmentmarkerlist) {trifree(p->segmentmarkerlist);} p->segmentmarkerlist = array; break;
-                case 6 :  if (p->edgelist)          {trifree(p->edgelist);}          p->edgelist = array;          p->numberofedges     = (ix_array)/2; break;
+                case 6 :  if (p->edgelist)          {trifree(p->edgelist);}          p->edgelist = array;          p->numberofedges     = ix_array/2; break;
                 case 7 :  if (p->edgemarkerlist)    {trifree(p->edgemarkerlist);}    p->edgemarkerlist = array;    break;
                 }
             /* return count of how many items added */
             ST(0) = sv_newmortal();
-            sv_setiv(ST(0), (int)ix_array);
+            sv_setiv(ST(0), ix_array);
             XSRETURN(1);
             }
         /* getter */
@@ -378,49 +379,36 @@ intList( intArray * array, ... )
         XSRETURN(size_RETVAL);
 
 Math::Geometry::Delaunay::TriangulateioPtr
-to_ptr(Math::Geometry::Delaunay::Triangulateio THIS = NO_INIT)
+to_ptr(SV * THIS)
     PREINIT:
         STRLEN len;
-        char *s;
     CODE:
-        if (sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {
-            s = SvPV((SV*)SvRV(ST(0)), len);
-            if (len != sizeof(THIS)) { croak("Size %d of packed data != expected %d", len, sizeof(THIS)); }
-            RETVAL = (struct triangulateio *)s;
-            }
-        else { croak("THIS is not of type Math::Geometry::Delaunay::Triangulateio"); }
+        RETVAL = (struct triangulateio *) SvPV((SV*)SvRV(THIS), len);
     OUTPUT:
         RETVAL
 
-void *
-triio_DESTROY(Math::Geometry::Delaunay::Triangulateio THIS = NO_INIT)
+SV *
+triio_DESTROY(SV * THIS)
     PREINIT:
-        struct triangulateio * p;
         STRLEN len;
-        char *s;
+        struct triangulateio * p;
     CODE:
-        s = SvPV((SV*)SvRV(ST(0)), len);
-        if (len != sizeof(THIS)) {croak("In DESTROY, size %d of packed data != expected %d", len, sizeof(THIS));}
-        p = (struct triangulateio *) s;
+        if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
 
-        if (sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {
-            if (len != sizeof(THIS)) {
-                croak("Size %d of packed data != expected %d", len, sizeof(THIS));
-                }
-            if (p->pointlist)             {trifree(p->pointlist);}
-            if (p->pointattributelist)    {trifree(p->pointattributelist);}
-            if (p->pointmarkerlist)       {trifree(p->pointmarkerlist);}
-            if (p->trianglelist)          {trifree(p->trianglelist);}
-            if (p->triangleattributelist) {trifree(p->triangleattributelist);}
-            if (p->trianglearealist)      {trifree(p->trianglearealist);}
-            if (p->neighborlist)          {trifree(p->neighborlist);}
-            if (p->segmentlist)           {trifree(p->segmentlist);}
-            if (p->segmentmarkerlist)     {trifree(p->segmentmarkerlist);}
-            if (p->holelist)              {trifree(p->holelist);}
-            if (p->regionlist)            {trifree(p->regionlist);}
-            if (p->edgelist)              {trifree(p->edgelist);}
-            if (p->edgemarkerlist)        {trifree(p->edgemarkerlist);}
-            if (p->normlist)              {trifree(p->normlist);}
-            }
-        else { croak("THIS is not of type Math::Geometry::Delaunay::Triangulateio"); }
+        if (p->pointlist)             {trifree(p->pointlist);}
+        if (p->pointattributelist)    {trifree(p->pointattributelist);}
+        if (p->pointmarkerlist)       {trifree(p->pointmarkerlist);}
+        if (p->trianglelist)          {trifree(p->trianglelist);}
+        if (p->triangleattributelist) {trifree(p->triangleattributelist);}
+        if (p->trianglearealist)      {trifree(p->trianglearealist);}
+        if (p->neighborlist)          {trifree(p->neighborlist);}
+        if (p->segmentlist)           {trifree(p->segmentlist);}
+        if (p->segmentmarkerlist)     {trifree(p->segmentmarkerlist);}
+        if (p->holelist)              {trifree(p->holelist);}
+        if (p->regionlist)            {trifree(p->regionlist);}
+        if (p->edgelist)              {trifree(p->edgelist);}
+        if (p->edgemarkerlist)        {trifree(p->edgemarkerlist);}
+        if (p->normlist)              {trifree(p->normlist);}
 

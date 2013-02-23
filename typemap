@@ -33,7 +33,7 @@ T_ARRAY
     /* doubles. The largest int that fits in a double is then the limit for   */
     /* the number of points or edges in a triangulation.                      */
     /**************************************************************************/
-    U32 ix_$var = $argoff + 1;
+    IV ix_$var = $argoff + 1;
     items--;
     if (items>0) {
         $var = $ntype(items - $argoff + 1);
