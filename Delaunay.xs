@@ -15,15 +15,18 @@
 /* triangle.h needs these two defines                 */
 /* REAL can be single or double, but I've used        */
 /* double everywhere in the code here, so use double. */
-/* VOID should be void. Triangle sets it to int to    */
-/* "fool dumb compilers" but void looks like it's     */
+/* TRIVOID should be void. triangle.c sets it to int  */
+/* to "fool dumb compilers" but void looks like it's  */
 /* more portable.                                     */
 /* We also set REAL in the Build.PL compiler flags.   */
-/* VOID should probably also be set to void directly  */
-/* in triangle.c.                                     */
+/* NOTE: TRIVOID should also be defined as void       */
+/* (instead of int) directly in triangle.c.           */
+/* NOTE: TRIVOID was originally VOID in triangle.c,   */
+/* but that interacted in a bad way with VOID defined */
+/* in winnt.h in MingW, so: triangle.c =~ s/VOID/TRIVOID/g */
 
 #define REAL double
-#define VOID void
+#define TRIVOID void
 
 #include "triangle.h"
 
@@ -46,12 +49,12 @@ typedef int       intArray;
 
 doubleArray * doubleArrayPtr( int nelem ) {
     doubleArray * array;
-    Newx(array, nelem, doubleArray);
+    array = (doubleArray *) trimalloc(nelem * sizeof(double));
     return array;
     }
 intArray * intArrayPtr( int nelem ) {
     intArray * array;
-    Newx(array, nelem, intArray);
+    array = (intArray *) trimalloc(nelem * sizeof(int));
     return array;
     }
 

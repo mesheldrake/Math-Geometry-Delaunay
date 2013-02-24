@@ -282,8 +282,10 @@ struct triangulateio {
 #ifdef ANSI_DECLARATORS
 void triangulate(char *, struct triangulateio *, struct triangulateio *,
                  struct triangulateio *);
-void trifree(VOID *memptr);
+void trifree(TRIVOID *memptr);
+TRIVOID *trimalloc(int size);
 #else /* not ANSI_DECLARATORS */
 void triangulate();
 void trifree();
+TRIVOID *trimalloc();
 #endif /* not ANSI_DECLARATORS */
