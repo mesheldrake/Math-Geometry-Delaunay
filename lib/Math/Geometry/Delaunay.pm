@@ -1964,7 +1964,7 @@ topology is the second item returned.
     elements => [
                   { # a triangle
                   nodes      => [noderef0, noderef1, noderef2],
-                  edges      => [edgeref0, edgeref1],
+                  edges      => [edgeref0, edgeref1, edgeref2],
                   neighbors  => [neighref0, neighref1, neighref2],
                   attributes => [attrib0, ...]
                   },
