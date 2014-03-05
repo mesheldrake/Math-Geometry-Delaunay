@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.16.1 Wednesday March 5 02:14:00 2014
+
+  - small documentation edit
+
 0.16 Saturday February 23 17:03:00 2013
 
   - Fixed crash on Win64 - now passes all build tests on that platform.
