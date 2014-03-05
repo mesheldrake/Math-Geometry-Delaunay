@@ -11,7 +11,7 @@ our $VERSION;
 
 BEGIN {
     use XSLoader;
-    $VERSION = '0.16.1';
+    $VERSION = '0.17';
     XSLoader::load('Math::Geometry::Delaunay');
     exactinit();
     }
@@ -1534,7 +1534,7 @@ Math::Geometry::Delaunay - Quality Mesh Generator and Delaunay Triangulator
 
 =head1 VERSION
 
-Version 0.16.1
+Version 0.17
 
 =cut
 
