@@ -463,10 +463,10 @@ sub topology {
     my $pcnt = 0; # In Voronoi diagram node index corresponds to dual Delaunay element.
     my @nodes = map {{ point => $_, attributes => [], marker => undef, elements => [], edges => [] , segments => [], index => $pcnt++}} ltolol(2,$triio->pointlist);
     my $tcnt = 0; # In Delaunay triangulation element index corresponds to dual Voronoi node.
-    my @eles  = map {my $ele={ nodes=>[map {$nodes[$_]} @{$_}],edges => [], neighbors => [], marker => undef, attributes => [], index => $tcnt++ };map {push @{$_->{elements}},$ele} @{$ele->{nodes}};$ele} ltolol($triio->numberofcorners,$triio->trianglelist);
+    my @eles  = map {my $ele={ nodes=>[map {$nodes[$_]}              @{$_}], marker => undef, edges => [], neighbors => [], attributes => [], index => $tcnt++ }; foreach (@{$ele->{nodes}}) {push(@{$_->{elements}},$ele)};$ele} ltolol($triio->numberofcorners,$triio->trianglelist);
     my $ecnt = 0; # Corresponding edges in the Delaunay and Voronoi topologies will have the same index.
-    my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} grep {$_>-1} @{$_}],marker => undef, elements => [], vector => undef, index => $ecnt++};foreach (@{$edg->{nodes}}) {push @{$_->{edges}   },$edg};$isVoronoi = 1 if ($_->[0] == -1 || $_->[1] == -1);$edg} ltolol(2,$triio->edgelist);
-    my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]}              @{$_}],marker => undef, elements => []                                   };foreach (@{$edg->{nodes}}) {push @{$_->{segments}},$edg};                                                   $edg} ltolol(2,$triio->segmentlist);
+    my @edges = map {my $edg={ nodes=>[map {$nodes[$_]} grep {$_>-1} @{$_}], marker => undef, elements => [], vector => undef,                index => $ecnt++};  foreach (@{$edg->{nodes}}) {push @{$_->{edges}   },$edg};if (!$isVoronoi && ($_->[0] == -1 || $_->[1] == -1)) {$isVoronoi = 1};$edg} ltolol(2,$triio->edgelist);
+    my @segs  = map {my $edg={ nodes=>[map {$nodes[$_]}              @{$_}], marker => undef, elements => []                                                  };  foreach (@{$edg->{nodes}}) {push @{$_->{segments}},$edg};                                                                      $edg} ltolol(2,$triio->segmentlist);
 
     my @elementattributes;
     if ($triio->numberoftriangleattributes) {
@@ -519,12 +519,15 @@ sub topology {
                 }
             }
         }
-    return {
+
+    my $ret = {
         nodes    => \@nodes,
         edges    => \@edges,
         segments => \@segs,
         elements => \@eles
         };
+    bless $ret, 'mgd_topo'; # gives the hash a DESTROY method that helps with garbage collection
+    return $ret;
     }
 
 sub get_point_in_polygon {
@@ -1526,6 +1529,17 @@ sub dist2d {sqrt(($_[0]->[0]-$_[1]->[0])**2+($_[0]->[1]-$_[1]->[1])**2)}
 sub counterclockwise {
     my ($pa, $pb, $pc) = @_;
     return _counterclockwise($pa->[0],$pa->[1],$pb->[0],$pb->[1],$pc->[0],$pc->[1]);
+    }
+
+package mgd_topo;
+
+sub DESTROY {
+    # circular references in the topology data seem to thwart garbage collection
+    # so we'll undo some of the cross references to help with that
+    my $self = shift;
+    if (exists $self->{elements}) { undef $_->{nodes} for @{$self->{elements}};}
+    if (exists $self->{edges})    { undef $_->{nodes} for @{$self->{edges}};   }
+    if (exists $self->{segments}) { undef $_->{nodes} for @{$self->{segments}};}
     }
 
 =head1 NAME
