@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.18 Friday October 10 18:27:00 2014
+
+  - custom DESTROY method for topology hash to fix failed garbage collection
+
 0.17 Wednesday March 5 02:48:00 2014
 
   - small documentation edit
