@@ -87,7 +87,9 @@ else {
             } 
         }
     elsif ($^O =~ /linux/i) {
-        push @{$builder->extra_compiler_flags()}, "-DHAVE__FPU_SETCW";
+        if ($builder->config('archname') !~ /^arm/i) { # xpfpa macros not suited to ARM, but doubles on ARM should be fine
+            push @{$builder->extra_compiler_flags()}, "-DHAVE__FPU_SETCW";
+            }
         }
 
     # Based on Perl configure hints that set usemymalloc=y for certain platforms
