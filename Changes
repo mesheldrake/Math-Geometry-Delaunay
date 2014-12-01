@@ -1,5 +1,9 @@
 Revision history for Perl extension Math::Geometry::Delaunay.
 
+0.19 Sunday November 30 21:00:00 2014
+
+  - Fix build for ARM-linux, e.g. Raspberry Pi
+
 0.18 Friday October 10 18:27:00 2014
 
   - custom DESTROY method for topology hash to fix failed garbage collection
