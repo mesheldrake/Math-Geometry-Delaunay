@@ -234,7 +234,7 @@ numberof(SV * THIS, int newval = 0)
         STRLEN len;
     CODE:
         if (!sv_derived_from(THIS, "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        if (SvCUR(SvRV(THIS)) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(THIS)), sizeof(*p)); }
+        if (SvCUR(SvRV(THIS)) != sizeof(*p)) { croak("Size %lu of packed data != expected %lu", SvCUR(SvRV(THIS)), sizeof(*p)); }
         p = (struct triangulateio *) SvPV((SV*)SvRV(THIS), len);
         
         switch (ix) {
@@ -289,7 +289,7 @@ doubleList(doubleArray * array, ... )
         int orig_items_cnt = (int) items;
     CODE:
         if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %lu of packed data != expected %lu", SvCUR(SvRV(ST(0))), sizeof(*p)); }
         p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
 
         /* setter */
@@ -345,7 +345,7 @@ intList( intArray * array, ... )
         int orig_items_cnt = (int) items;
     CODE:
         if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %lu of packed data != expected %lu", SvCUR(SvRV(ST(0))), sizeof(*p)); }
         p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
         /* setter */
         if (orig_items_cnt > 1) {
@@ -397,7 +397,7 @@ triio_DESTROY(SV * THIS)
         struct triangulateio * p;
     CODE:
         if (!sv_derived_from(ST(0), "Math::Geometry::Delaunay::Triangulateio")) {croak("Wrong type to numberof()");} 
-        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %d of packed data != expected %d", SvCUR(SvRV(ST(0))), sizeof(*p)); }
+        if (SvCUR(SvRV(ST(0))) != sizeof(*p)) { croak("Size %lu of packed data != expected %lu", SvCUR(SvRV(ST(0))), sizeof(*p)); }
         p = (struct triangulateio *) SvPV((SV*)SvRV(ST(0)), len);
 
         if (p->pointlist)             {trifree(p->pointlist);}
