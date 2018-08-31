@@ -30,7 +30,19 @@
 
 #include "triangle.h"
 
-/* these let us refer to the struct in triangle.h    */
+/* declare a couple functions in triangle.c not exposed by triangle.h */
+/* mainly to supress compiler warnings */
+
+typedef REAL *vertex;
+#ifdef ANSI_DECLARATORS
+REAL counterclockwiseadapt(vertex pa, vertex pb, vertex pc, REAL detsum);
+void exactinit();
+#else /* not ANSI_DECLARATORS */
+void counterclockwiseadapt();
+void exactinit();
+#endif /* not ANSI_DECLARATORS */
+
+/* these let us refer to the struct in triangle.h */
 
 typedef struct triangulateio * Math__Geometry__Delaunay__TriangulateioPtr;
 typedef struct triangulateio   Math__Geometry__Delaunay__Triangulateio;
