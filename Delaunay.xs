@@ -27,13 +27,13 @@
 
 #define REAL double
 #define TRIVOID void
+typedef REAL *vertex;
 
 #include "triangle.h"
 
 /* declare a couple functions in triangle.c not exposed by triangle.h */
 /* mainly to supress compiler warnings */
 
-typedef REAL *vertex;
 #ifdef ANSI_DECLARATORS
 REAL counterclockwiseadapt(vertex pa, vertex pb, vertex pc, REAL detsum);
 void exactinit();
@@ -74,8 +74,6 @@ intArray * intArrayPtr( int nelem ) {
 /* Triangle's version (removed mesh and behavior params)      */
 /* "The result is also a rough approximation of twice the     */
 /*  signed area of the triangle defined by the three points." */
-
-typedef double * vertex;
 
 /* A global defined in triangle.c */
 extern REAL ccwerrboundA;
